@@ -1,8 +1,12 @@
 (library
     (schasm)
-  (export ; instructions
+  (export ;; instructions
 	  mov
-	  ; registers
+	  jmp
+	  nop
+	  label
+
+	  ;; registers
 	  %rax
 	  %rbx
 	  %rcx
@@ -20,21 +24,27 @@
 	  %r14
 	  %r15
 
+	  ;; helpers
+	  asm
+	  make-asm
+	  asm-port
+	  asm-value
+
 	  ;; testing
 	  test-schasm)
   (import (chezscheme))
 
   (define-syntax emit
     (syntax-rules ()
-      ((emit port instr)
+      ((emit asm instr)
        (if (list? instr)
-	   (for-each (lambda (x) (put-u8 port x))
+	   (for-each (lambda (x) (put-u8 (asm-port asm) x))
 		     instr)
-	   (put-u8 port instr)))
-      ((emit port instr xinstr ...)
+	   (put-u8 (asm-port asm) instr)))
+      ((emit asm instr xinstr ...)
        (begin
-	 (emit port instr)
-	 (emit port xinstr ...)))))
+	 (emit asm instr)
+	 (emit asm xinstr ...)))))
 
   (define register (make-record-type "register" '(x)))
   (define make-register (record-constructor register))
@@ -66,6 +76,42 @@
   (define %r14 (make-register 5))
   (define %r15 (make-register 5))
 
+  (define (make-asm)
+    (let ([port (let-values ([(op g) (open-bytevector-output-port)])
+		  (list op g))])
+      (cons (make-eq-hashtable) port)))
+
+  (define (asm-labels asm)
+    (car asm))
+  (define (asm-port asm)
+    (cadr asm))
+  (define (asm-value! asm)
+    ((caddr asm)))
+  (define (asm-value asm)
+    ;; TODO is there a better way to do this with a bytevector port??
+    (let ([v (asm-value! asm)])
+      (put-bytevector (asm-port asm) v)
+      v))
+  (define (asm-offset asm)
+    (bytevector-length (asm-value asm)))
+
+  (define (pp s)
+    (cond
+     ((hash-table? s)
+      (let-values ([(k v) (hashtable-entries s)])
+	(display (format "~a ~a" k v))))
+     (else
+      (display s)))
+    (newline))
+
+  (define (asm-label-offset asm label)
+    (let ([label (eq-hashtable-ref (asm-labels asm) label #f)])
+      (pp label)
+      (pp (asm-labels asm))
+      (unless label
+	(raise "unknown label"))
+      label))
+
   (define (encode-integer x bytes)
     (define (out x count result)
       (if (zero? count)
@@ -96,12 +142,26 @@
 	  (+ #xb8 (register-opcode register))
 	  (imm64 imm)))
 
+  (define (label asm name)
+    (eq-hashtable-set! (asm-labels asm) 
+		       name
+		       (asm-offset asm))
+    (nop asm))
+
+  (define (nop asm)
+    (emit asm #x90))
+
   (define (mov asm a b)
     (cond
      ((and (register? a) (number? b))
       (imm64->reg asm a b))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
+
+  (define (jmp asm label)
+    (emit asm
+	  #xe9 ; 16-bit offset
+	  (imm32 (- (asm-label-offset asm label) (asm-offset asm)))))
 
   (define-syntax assert-equal
     (syntax-rules ()
@@ -115,6 +175,12 @@
       ((_ name instrs ...)
        (begin
 	 instrs ...))))
+
+  (define-syntax asm
+    (syntax-rules ()
+      ((_ out (operator operands ...) ...)
+       (begin
+	 (operator out operands ...) ...))))
 
   (define (test-schasm)
     (test "imm16" (assert-equal (imm16 20) '(20 0)))

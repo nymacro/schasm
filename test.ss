@@ -2,11 +2,7 @@
 (import (schasm)
 	(chezscheme))
 
-(define out$
-  (let-values ([(op g) (open-bytevector-output-port)])
-    (cons op g)))
-(define out (car out$))
-(define out-value (cdr out$))
+(define out (make-asm))
 
 (define (print-hex instrs)
   (for-each (lambda (x) (display (format "~2x" x) (current-error-port)))
@@ -30,10 +26,14 @@
     	    (fn d)
     	    (loop)))))))
 
-(mov out %rax 20)
+;; (test-schasm)
 
-(disasm (out-value) (lambda (x) (display x) (newline)))
+(asm out
+     (label 'hello)
+     (mov %rax 20)
+     (mov %rbx 20)
+     (jmp 'hello))
 
-(test-schasm)
+(disasm (asm-value out) (lambda (x) (display x) (newline)))
 
 (exit)
