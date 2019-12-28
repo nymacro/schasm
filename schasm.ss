@@ -106,8 +106,6 @@
 
   (define (asm-label-offset asm label)
     (let ([label (eq-hashtable-ref (asm-labels asm) label #f)])
-      (pp label)
-      (pp (asm-labels asm))
       (unless label
 	(raise "unknown label"))
       label))

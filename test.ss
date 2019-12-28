@@ -5,8 +5,17 @@
 (define out (make-asm))
 
 (define (print-hex instrs)
-  (for-each (lambda (x) (display (format "~2x" x) (current-error-port)))
-	    (bytevector->u8-list instrs)))
+  (let ([n 0])
+    (for-each (lambda (x)
+		(set! n (fx1+ n))
+		(when (<= x 15)
+		  (display "0" (current-error-port)))
+		(display (format "~x" x) (current-error-port))
+		(when (= 0 (fxmod n 8))
+		  (display ":" (current-error-port)))
+		(when (= 0 (fxmod n 16))
+		  (newline)))
+	      (bytevector->u8-list instrs))))
 
 ;; diassemble using
 (define (disasm instrs fn)
