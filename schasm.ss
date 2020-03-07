@@ -1,46 +1,47 @@
 (library
     (schasm)
   (export ;; instructions
-	  mov
-	  jmp
-	  nop
-	  label
+    mov
+    jmp
+    nop
+    ret
+    label
 
-	  ;; registers
-	  %rax
-	  %rbx
-	  %rcx
-	  %rdx
-	  %rbp
-	  %rsp
-	  %rsi
-	  %rdi
-	  %r8
-	  %r9
-	  %r10
-	  %r11
-	  %r12
-	  %r13
-	  %r14
-	  %r15
+    ;; registers
+    %rax
+    %rbx
+    %rcx
+    %rdx
+    %rbp
+    %rsp
+    %rsi
+    %rdi
+    %r8
+    %r9
+    %r10
+    %r11
+    %r12
+    %r13
+    %r14
+    %r15
 
-	  ;; helpers
-	  asm
-	  make-asm
-	  asm-port
-	  asm-value
+    ;; helpers
+    asm
+    make-asm
+    asm-port
+    asm-value
 
-	  ;; testing
-	  test-schasm)
+    ;; testing
+    test-schasm)
   (import (chezscheme))
 
   (define-syntax emit
     (syntax-rules ()
       ((emit asm instr)
        (if (list? instr)
-	   (for-each (lambda (x) (put-u8 (asm-port asm) x))
-		     instr)
-	   (put-u8 (asm-port asm) instr)))
+         (for-each (lambda (x) (put-u8 (asm-port asm) x))
+                   instr)
+         (put-u8 (asm-port asm) instr)))
       ((emit asm instr xinstr ...)
        (begin
 	 (emit asm instr)
@@ -113,10 +114,10 @@
   (define (encode-integer x bytes)
     (define (out x count result)
       (if (zero? count)
-	  (list result x)
-	  (out (fxarithmetic-shift-right x 8)
-	       (- count 1)
-	       (cons (fxand x #xff) result))))
+        (list result x)
+        (out (fxarithmetic-shift-right x 8)
+             (- count 1)
+             (cons (fxand x #xff) result))))
     (out x bytes '()))
 
   (define (imm16 x)
@@ -148,6 +149,9 @@
 
   (define (nop asm)
     (emit asm #x90))
+
+  (define (ret asm)
+    (emit asm #xc3))
 
   (define (mov asm a b)
     (cond
