@@ -51,17 +51,16 @@
 ;; (test-schasm)
 
 (asm out
-     (label 'hello)
-     (mov %rax 20)
-     ;; (mov %rbx 20)
-     (jmp 'hello)
+     (push %rbp)
+     ;; (label 'hello)
+     ;; (mov %rax 20)
+     ;; (jmp 'hello)
+     (mov %rbp %rsp)
+     (pop %rbp)
      (ret))
 
 (let ([bin (asm-value out)])
   (disasm bin (current-error-port))
-  ;; (for-each (lambda (x)
-  ;;             (write-char (integer->char x)))
-  ;;           (bytevector->u8-list bin))
-  (print-hex bin (current-output-port))
-  )
+  (print-hex bin (current-output-port)))
+
 (exit)

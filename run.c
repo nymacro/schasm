@@ -10,6 +10,10 @@
 
 typedef void (*JMP_TO)(void);
 
+void test_func(void) {
+  return;
+}
+
 void print_hex(unsigned char *buf, size_t buf_len) {
   for (size_t i = 0; i < buf_len; i += 8) {
     for (size_t j = i; j < i+8; ++j) {
@@ -64,7 +68,7 @@ int main(int argc, char *argv[]) {
   void *mm = NULL;
 
   const size_t sz = sizeof(char) * 4096;
-  mm = mmap(NULL, sz, PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+  mm = mmap(NULL, sz, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANON, -1, 0);
   if (mm == MAP_FAILED) {
     fprintf(stderr, "Failed to mmap region\n");
     exit(1);
@@ -84,8 +88,6 @@ int main(int argc, char *argv[]) {
     if (dup3(p[1], STDOUT_FILENO, 0) == -1) {
       fprintf(stderr, "failed to shift stdout\n");
     }
-    /* close(p[1]); */
-    /* close(p[0]); */
 
     char *args[] = { "/usr/bin/env", "-v", "/home/nymacro/ChezScheme/INSTALL/bin/scheme", "-q", "--script", "test.ss", NULL };
     char pwd[256];
@@ -97,28 +99,25 @@ int main(int argc, char *argv[]) {
     if (fd == -1) {
       fprintf(stderr, "failed to exec subprocess: %s\n", strerror(errno));
     }
-
     exit(1);
   }
 
+  fprintf(stderr, "main process continues\n");
   int fd = p[0];
   int len_read = 0;
   int did_read = 0;
   unsigned char buf[4096] = {0};
 
   do {
-    did_read = read(fd, buf, sizeof(buf));
+    did_read = read(fd, buf+len_read, sizeof(buf)-len_read);
     if (did_read < 0) {
       fprintf(stderr, "Failed to read (%i)\n", did_read);
       goto done;
     }
-    if (did_read == 0) {
-      sleep(1);
-      continue;
-    }
+    len_read += did_read;
+    if (did_read == 0) break;
   } while (0);
 
-  len_read += did_read;
   fprintf(stderr, "read %i bytes (%i hex)\n", len_read/2, len_read);
 
   /* memcpy(mm, buf, len_read); */
@@ -133,12 +132,16 @@ int main(int argc, char *argv[]) {
   /* print_hex(mm, len_read/2); */
 
   printf("Executing\n");
-  if (mprotect(mm, sz, PROT_EXEC) == -1) {
+  if (mprotect(mm, sz, PROT_READ|PROT_EXEC) == -1) {
     fprintf(stderr, "failed to map exec\n");
+    goto done;
   }
+
   /* jump to loaded code */
   JMP_TO jmp = (JMP_TO)mm;
   jmp();
+
+  printf("done executing\n");
 
  done:
   close(p[0]);

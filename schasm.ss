@@ -2,6 +2,8 @@
     (schasm)
   (export ;; instructions
     mov
+    push
+    pop
     jmp
     nop
     ret
@@ -52,12 +54,13 @@
   (define register? (record-predicate register))
   (define register-opcode (record-accessor register 0))
 
+  ;; TODO what is this again???
   (define (rex-prefix w r x b)
     (fxior #b01000000
-	   (fxarithmetic-shift-left w 3)
-	   (fxarithmetic-shift-left r 2)
-	   (fxarithmetic-shift-left x 1)
-	   b))
+           (fxarithmetic-shift-left w 3)
+           (fxarithmetic-shift-left r 2)
+           (fxarithmetic-shift-left x 1)
+           b))
 
   (define %rax (make-register 0))
   (define %rbx (make-register 1))
@@ -65,17 +68,17 @@
   (define %rdx (make-register 3))
   (define %rbp (make-register 4))
   (define %rsp (make-register 5))
-  (define %rsi (make-register 5))
-  (define %rdi (make-register 5))
+  (define %rsi (make-register 6))
+  (define %rdi (make-register 7))
 
-  (define %r8  (make-register 5))
-  (define %r9  (make-register 5))
-  (define %r10 (make-register 5))
-  (define %r11 (make-register 5))
-  (define %r12 (make-register 5))
-  (define %r13 (make-register 5))
-  (define %r14 (make-register 5))
-  (define %r15 (make-register 5))
+  (define %r8  (make-register 8))
+  (define %r9  (make-register 9))
+  (define %r10 (make-register 10))
+  (define %r11 (make-register 11))
+  (define %r12 (make-register 12))
+  (define %r13 (make-register 13))
+  (define %r14 (make-register 14))
+  (define %r15 (make-register 15))
 
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
@@ -135,11 +138,26 @@
 	   [l (imm32 (fxarithmetic-shift-right x 32))])
       (append m l)))
 
+  (define (imm32->reg asm register imm)
+    (emit asm
+          (rex-prefix 1 0 0 0)
+	  (+ #xc7 (register-opcode register))
+          #xc0
+	  (imm32 imm)))
+
+  ;; FIXME
   (define (imm64->reg asm register imm)
     (emit asm
-	  (rex-prefix 1 0 0 0)
-	  (+ #xb8 (register-opcode register))
-	  (imm64 imm)))
+          (rex-prefix 1 0 0 0)
+	  (+ #xc7 (register-opcode register))
+          #xc0
+	  (imm32 imm)))
+
+  (define (reg64->reg64 asm dst src)
+    (emit asm
+          #x48
+          (+ #x85 (register-opcode dst))
+          (+ #xe0 (register-opcode src))))
 
   (define (label asm name)
     (eq-hashtable-set! (asm-labels asm) 
@@ -156,7 +174,23 @@
   (define (mov asm a b)
     (cond
      ((and (register? a) (number? b))
-      (imm64->reg asm a b))
+      (imm32->reg asm a b))
+     ((and (register? a) (register? b))
+      (reg64->reg64 asm a b))
+     (else
+      (raise "unrecognized/unhandled operand[s]"))))
+
+  (define (push asm src)
+    (cond
+     ((register? src)
+      (emit asm (+ #x51 (register-opcode src))))
+     (else
+      (raise "unrecognized/unhandled operand[s]"))))
+
+  (define (pop asm dst)
+    (cond
+     ((register? dst)
+      (emit asm (+ #x59 (register-opcode dst))))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
