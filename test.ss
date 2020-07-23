@@ -52,11 +52,12 @@
 
 (asm out
      (push %rbp)
-     ;; (label 'hello)
-     ;; (mov %rax 20)
      ;; (jmp 'hello)
+     ;; (mov %rax 10)
+     ;; (label 'hello)
      (mov %rbp %rsp)
      (pop %rbp)
+     (mov %rax 20) ; return 20
      (ret))
 
 (let ([bin (asm-value out)])

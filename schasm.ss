@@ -29,6 +29,7 @@
 
     ;; helpers
     asm
+    resolve-labels
     make-asm
     asm-port
     asm-value
@@ -194,10 +195,24 @@
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
-  (define (jmp asm label)
+  (define (label-defined? asm label)
+    (hashtable-contains? (asm-labels asm) label))
+
+  (define (jmp-sentinal asm label)
+    (list 'label label (asm-offset asm)))
+  (define (jmp-sentinal? x)
+    (and (list? x) (null? x)
+         (equal? 'label (car x))))
+
+  (define (make-jmp asm label offset)
     (emit asm
-	  #xe9 ; 16-bit offset
-	  (imm32 (- (asm-label-offset asm label) (asm-offset asm)))))
+          #xe9 ; 16-bit offset
+          (imm32 (- (asm-label-offset asm label) offset))))
+
+  (define (jmp asm label)
+    (if (label-defined? asm label)
+      (make-jmp asm label (asm-offset asm))
+      (jmp-sentinal asm label)))
 
   (define-syntax assert-equal
     (syntax-rules ()
@@ -212,11 +227,23 @@
        (begin
 	 instrs ...))))
 
+  ;; TODO make jumps patchable in order to resolve offsets
+  ;; when labels aren't already defined
+  (define (resolve-labels asm instrs)
+    instrs)
+
   (define-syntax asm
+    (syntax-rules ()
+      ((_ out xs ...)
+       (begin
+         (resolve-labels out
+                         (asm-syntax out xs ...))))))
+
+  (define-syntax asm-syntax
     (syntax-rules ()
       ((_ out (operator operands ...) ...)
        (begin
-	 (operator out operands ...) ...))))
+         (operator out operands ...) ...))))
 
   (define (test-schasm)
     (test "imm16" (assert-equal (imm16 20) '(20 0)))

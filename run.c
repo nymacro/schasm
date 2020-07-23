@@ -8,7 +8,11 @@
 
 #include <sys/mman.h> /* for mmap */
 
-typedef void (*JMP_TO)(void);
+/*
+ * 
+ * return value: %rax
+ */
+typedef int (*JMP_TO)(void);
 
 void test_func(void) {
   return;
@@ -89,7 +93,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "failed to shift stdout\n");
     }
 
-    char *args[] = { "/usr/bin/env", "-v", "/home/nymacro/ChezScheme/INSTALL/bin/scheme", "-q", "--script", "test.ss", NULL };
+    char *args[] = { "/usr/bin/env", "-v", "/home/nymacro/ChezScheme/INSTALL/bin/petite", "-q", "--script", "test.ss", NULL };
     char pwd[256];
     getcwd(pwd, sizeof(pwd));
     char *env[] = { pwd, NULL };
@@ -139,7 +143,7 @@ int main(int argc, char *argv[]) {
 
   /* jump to loaded code */
   JMP_TO jmp = (JMP_TO)mm;
-  jmp();
+  printf("x: %i\n", jmp());
 
   printf("done executing\n");
 
