@@ -28,36 +28,19 @@
                   (display (format "~x" x)))
                 (bytevector->u8-list instrs)))))
 
-;; diassemble using
-(define (disasm instrs port)
-  (parameterize ((current-output-port port))
-    (display "Disassembling\n")
-    (print-hex-pretty instrs port)
-    (newline)
-    (let ([transcoder (make-transcoder (utf-8-codec) (eol-style lf)
-                                       (error-handling-mode replace))])
-      (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble" 'block transcoder)])
-        (for-each (lambda (x) (display (format "~a " x) stdin))
-                  (bytevector->u8-list instrs))
-        (close-output-port stdin)
-
-        (let loop ()
-          (let ((d (get-line stdout)))
-            (unless (eof-object? d)
-              (display d)
-              (newline)
-              (loop))))))))
-
 ;; (test-schasm)
 
 (asm out
      (push %rbp)
-     ;; (jmp 'hello)
-     ;; (mov %rax 10)
-     ;; (label 'hello)
+     (jmp 'hello)
+     (mov %rax 10)
+     (label 'hello)
+     (jmp 'return)
+     (mov %rax 40)
+     (label 'return)
+     (mov %rax 20) ; return 20
      (mov %rbp %rsp)
      (pop %rbp)
-     (mov %rax 20) ; return 20
      (ret))
 
 (let ([bin (asm-value out)])

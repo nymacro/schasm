@@ -9,6 +9,8 @@
     ret
     label
 
+    jmp-relative
+
     ;; registers
     %rax
     %rbx
@@ -29,10 +31,13 @@
 
     ;; helpers
     asm
+    with-asm
     resolve-labels
     make-asm
     asm-port
     asm-value
+
+    disasm
 
     ;; testing
     test-schasm)
@@ -83,22 +88,38 @@
 
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
-		  (list op g))])
-      (cons (make-eq-hashtable) port)))
+		  (cons op g))])
+      (list (make-eq-hashtable) port (make-eq-hashtable))))
 
   (define (asm-labels asm)
     (car asm))
+
   (define (asm-port asm)
-    (cadr asm))
-  (define (asm-value! asm)
-    ((caddr asm)))
+    (caadr asm))
+
+  (define (asm-read-value! asm)
+    ((cdr (cadr asm))))
   (define (asm-value asm)
     ;; TODO is there a better way to do this with a bytevector port??
-    (let ([v (asm-value! asm)])
+    (let ([v (asm-read-value! asm)])
       (put-bytevector (asm-port asm) v)
       v))
+  (define (asm-value! asm value)
+    (asm-read-value! asm)
+    (put-bytevector (asm-port asm) value)
+    value)
   (define (asm-offset asm)
     (bytevector-length (asm-value asm)))
+
+  (define (asm-deferred asm)
+    (caddr asm))
+
+  ;; defer jump by adding to deferred label hashtable
+  (define (defer-jmp asm label whence)
+    (let ([defers (eq-hashtable-ref (asm-deferred asm) label #f)])
+      (if defers
+        (eq-hashtable-set! (asm-deferred asm) label (cons whence defers))
+        (eq-hashtable-set! (asm-deferred asm) label (list whence)))))
 
   (define (pp s)
     (cond
@@ -198,21 +219,22 @@
   (define (label-defined? asm label)
     (hashtable-contains? (asm-labels asm) label))
 
-  (define (jmp-sentinal asm label)
-    (list 'label label (asm-offset asm)))
-  (define (jmp-sentinal? x)
-    (and (list? x) (null? x)
-         (equal? 'label (car x))))
-
-  (define (make-jmp asm label offset)
+  (define (jmp-relative asm offset)
+    ;; offset based on next instruction
+    ;; -4 is magic value
     (emit asm
-          #xe9 ; 16-bit offset
-          (imm32 (- (asm-label-offset asm label) offset))))
+          #xe9 ; 32-bit offset
+          (imm32 (- offset 4))))
 
   (define (jmp asm label)
-    (if (label-defined? asm label)
-      (make-jmp asm label (asm-offset asm))
-      (jmp-sentinal asm label)))
+    (let* ((offset (asm-offset asm))
+           (predefp (label-defined? asm label))
+           (label-offset (if predefp
+                           (asm-label-offset asm label)
+                           0)))
+      (jmp-relative asm (- label-offset offset))
+      (unless predefp
+        (defer-jmp asm label offset))))
 
   (define-syntax assert-equal
     (syntax-rules ()
@@ -227,9 +249,26 @@
        (begin
 	 instrs ...))))
 
-  ;; TODO make jumps patchable in order to resolve offsets
-  ;; when labels aren't already defined
   (define (resolve-labels asm instrs)
+    (let loop ((cells (vector->list (hashtable-cells (asm-deferred asm)))))
+      (when (and cells (not (null? cells)))
+        (let* ((cell (car cells))
+               (label (car cell))
+               (offsets (cdr cell))
+               (label-offset (asm-label-offset asm label)))
+          (let label-loop ((o offsets))
+            (unless (null? o)
+              (let* ((offset (car o))
+                     (patch (with-asm (jmp-relative (- label-offset offset))))
+                     (mc (asm-read-value! asm)))
+                ;; (disasm patch (current-error-port))
+                ;; patch dummy jump
+                (bytevector-copy! patch 0
+                                  mc offset
+                                  (bytevector-length patch))
+                (asm-value! asm mc)
+                (label-loop (cdr o)))))
+          (loop (cdr cells)))))
     instrs)
 
   (define-syntax asm
@@ -239,11 +278,40 @@
          (resolve-labels out
                          (asm-syntax out xs ...))))))
 
+  (define-syntax with-asm
+    (syntax-rules ()
+      ((_ xs ...)
+       (let ((out (make-asm)))
+         (asm out xs ...)
+         (asm-value out)))))
+
+  ;; syntax sugar to allow writing:
+  ;; > (asm out (instr) (instr))
+  ;; instead of:
+  ;; > (begin (instr out) (instr out))
   (define-syntax asm-syntax
     (syntax-rules ()
       ((_ out (operator operands ...) ...)
        (begin
          (operator out operands ...) ...))))
+
+  ;; diassemble using llvm-mc
+  (define (disasm instrs port)
+    (parameterize ((current-output-port port))
+      (let ([transcoder (make-transcoder (utf-8-codec) (eol-style lf)
+                                         (error-handling-mode replace))])
+        (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble -show-encoding" 'block transcoder)])
+          (for-each (lambda (x) (display (format "~a " x) stdin))
+                    (bytevector->u8-list instrs))
+          (close-output-port stdin)
+
+          (let loop ()
+            (let ((d (get-line stdout)))
+              (unless (eof-object? d)
+                (display d)
+                (newline)
+                (loop))))))))
+
 
   (define (test-schasm)
     (test "imm16" (assert-equal (imm16 20) '(20 0)))
