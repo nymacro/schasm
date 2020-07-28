@@ -37,6 +37,8 @@
      (label 'hello)
      (jmp 'return)
      (mov %rax 40)
+     (mov %rax 40)
+     (mov %rax 40)
      (label 'return)
      (mov %rax 20) ; return 20
      (mov %rbp %rsp)
@@ -47,4 +49,5 @@
   (disasm bin (current-error-port))
   (print-hex bin (current-output-port)))
 
+(flush-output-port (current-output-port))
 (exit)

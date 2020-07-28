@@ -8,6 +8,9 @@
 
 #include <sys/mman.h> /* for mmap */
 
+#include <scheme.h>
+#include <equates.h>
+
 /*
  * 
  * return value: %rax
@@ -68,6 +71,8 @@ unsigned char from_hex(unsigned char c[2]) {
   return (_from_hex(c[0]) << 4) | _from_hex(c[1]);
 }
 
+#define CHEZ_LIBHOME "/home/nymacro/ChezScheme/INSTALL/lib/csv9.5.3/ta6fb"
+
 int main(int argc, char *argv[]) {
   void *mm = NULL;
 
@@ -77,6 +82,23 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to mmap region\n");
     exit(1);
   }
+
+  /* run scheme */
+  /* Sscheme_init(0); */
+  /* Sregister_boot_file(CHEZ_LIBHOME "/petite.boot"); */
+  /* // Sregister_boot_file(CHEZ_LIBHOME "/scheme.boot"); */
+  /* Sbuild_heap(0, 0); */
+  /* char *args[1] = {"scheme"}; */
+  /* Sscheme_script("test.ss", args, 1); */
+
+  /* /\* void *current_output_port = Stop_level_value(Sstring_to_symbol("magic-output-port")); *\/ */
+
+  /* void *fn = Stop_level_value(Sstring_to_symbol("magic-bin")); */
+  /* /\* void *bv = Scall0(fn); *\/ */
+
+  /* Sscheme_deinit(); */
+
+  /* exit(0); */
 
   printf("Region mmaped to %p\n", mm);
 
@@ -106,7 +128,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  fprintf(stderr, "main process continues\n");
+  fprintf(stderr, "Main process continues\n");
   int fd = p[0];
   int len_read = 0;
   int did_read = 0;
@@ -124,7 +146,6 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr, "read %i bytes (%i hex)\n", len_read/2, len_read);
 
-  /* memcpy(mm, buf, len_read); */
   /* hex into bin */
   for (int i = 0; i < len_read; i += 2) {
     unsigned char c = from_hex(&buf[i]);
@@ -132,8 +153,6 @@ int main(int argc, char *argv[]) {
     ((unsigned char*)mm)[i/2] = c;
   }
   printf("\n");
-
-  /* print_hex(mm, len_read/2); */
 
   printf("Executing\n");
   if (mprotect(mm, sz, PROT_READ|PROT_EXEC) == -1) {

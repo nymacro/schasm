@@ -221,10 +221,10 @@
 
   (define (jmp-relative asm offset)
     ;; offset based on next instruction
-    ;; -4 is magic value
+    ;; -5 is magic value (1 + 4 bytes)
     (emit asm
           #xe9 ; 32-bit offset
-          (imm32 (- offset 4))))
+          (imm32 (- offset 5))))
 
   (define (jmp asm label)
     (let* ((offset (asm-offset asm))
