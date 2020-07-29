@@ -31,18 +31,39 @@
 ;; (test-schasm)
 
 (asm out
+     ;; save rbp
      (push %rbp)
-     (jmp 'hello)
+
+     ;; loop some times
      (mov %rax 10)
+     (label 'loop)
+     (sub %rax 1)
+     (test 0)
+     (jne 'loop)
+
+     ;; stuff
+     (jmp 'hello)
+
+     (mov %rax 10)
+     (je 'hello)
+     (mov %rax 10)
+
      (label 'hello)
      (jmp 'return)
      (mov %rax 40)
      (mov %rax 40)
      (mov %rax 40)
      (label 'return)
-     (mov %rax 20) ; return 20
+
+     ;; restore rbp
      (mov %rbp %rsp)
      (pop %rbp)
+
+     ;; return value
+     (mov %rax 20)
+     (add %rax 20)
+     (sub %rax 2)
+
      (ret))
 
 (let ([bin (asm-value out)])

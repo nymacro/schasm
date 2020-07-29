@@ -1,15 +1,19 @@
 (library
     (schasm)
-  (export ;; instructions
+  (export
+    ;; instructions
     mov
     push
     pop
     jmp
+    je
+    jne
+    test
     nop
     ret
     label
-
-    jmp-relative
+    add
+    sub
 
     ;; registers
     %rax
@@ -32,7 +36,7 @@
     ;; helpers
     asm
     with-asm
-    resolve-labels
+    resolve-all
     make-asm
     asm-port
     asm-value
@@ -69,27 +73,29 @@
            b))
 
   (define %rax (make-register 0))
-  (define %rbx (make-register 1))
+  (define %rdx (make-register 1))
   (define %rcx (make-register 2))
-  (define %rdx (make-register 3))
+  (define %rbx (make-register 3))
   (define %rbp (make-register 4))
   (define %rsp (make-register 5))
   (define %rsi (make-register 6))
   (define %rdi (make-register 7))
 
-  (define %r8  (make-register 8))
-  (define %r9  (make-register 9))
-  (define %r10 (make-register 10))
-  (define %r11 (make-register 11))
-  (define %r12 (make-register 12))
-  (define %r13 (make-register 13))
-  (define %r14 (make-register 14))
-  (define %r15 (make-register 15))
+  (define %r8  (make-register 0))
+  (define %r9  (make-register 1))
+  (define %r10 (make-register 2))
+  (define %r11 (make-register 3))
+  (define %r12 (make-register 4))
+  (define %r13 (make-register 5))
+  (define %r14 (make-register 6))
+  (define %r15 (make-register 7))
 
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
 		  (cons op g))])
-      (list (make-eq-hashtable) port (make-eq-hashtable))))
+      (list (make-eq-hashtable)
+            port
+            (box (list)))))
 
   (define (asm-labels asm)
     (car asm))
@@ -108,18 +114,22 @@
     (asm-read-value! asm)
     (put-bytevector (asm-port asm) value)
     value)
-  (define (asm-offset asm)
-    (bytevector-length (asm-value asm)))
 
-  (define (asm-deferred asm)
+  (define asm-offset-
+    (make-parameter
+     (lambda (asm) (bytevector-length (asm-value asm)))))
+
+  (define (asm-offset asm)
+    ((asm-offset-) asm))
+
+  (define (asm-deferred-instr asm)
     (caddr asm))
 
-  ;; defer jump by adding to deferred label hashtable
-  (define (defer-jmp asm label whence)
-    (let ([defers (eq-hashtable-ref (asm-deferred asm) label #f)])
-      (if defers
-        (eq-hashtable-set! (asm-deferred asm) label (cons whence defers))
-        (eq-hashtable-set! (asm-deferred asm) label (list whence)))))
+  (define (defer-instr asm whence defer-fn)
+    (let* ((l (asm-deferred-instr asm))
+           (v (unbox l)))
+      ;; forgive me father, for I have sinned
+      (set-box! l (cons (cons defer-fn whence) v))))
 
   (define (pp s)
     (cond
@@ -163,17 +173,15 @@
   (define (imm32->reg asm register imm)
     (emit asm
           (rex-prefix 1 0 0 0)
-	  (+ #xc7 (register-opcode register))
-          #xc0
+	  #xc7
+          (+ #xc0 (register-opcode register))
 	  (imm32 imm)))
 
-  ;; FIXME
   (define (imm64->reg asm register imm)
     (emit asm
           (rex-prefix 1 0 0 0)
-	  (+ #xc7 (register-opcode register))
-          #xc0
-	  (imm32 imm)))
+	  (+ #xb8 (register-opcode register))
+	  (imm64 imm)))
 
   (define (reg64->reg64 asm dst src)
     (emit asm
@@ -196,7 +204,7 @@
   (define (mov asm a b)
     (cond
      ((and (register? a) (number? b))
-      (imm32->reg asm a b))
+      (imm64->reg asm a b))
      ((and (register? a) (register? b))
       (reg64->reg64 asm a b))
      (else
@@ -227,14 +235,67 @@
           (imm32 (- offset 5))))
 
   (define (jmp asm label)
+    (jmp-helper asm label jmp-relative))
+
+  (define (jmp-helper asm label fn)
     (let* ((offset (asm-offset asm))
            (predefp (label-defined? asm label))
            (label-offset (if predefp
                            (asm-label-offset asm label)
                            0)))
-      (jmp-relative asm (- label-offset offset))
+      (fn asm (- label-offset offset))
       (unless predefp
-        (defer-jmp asm label offset))))
+        (defer-instr asm offset
+          (lambda (asm)
+            (let ((label-offset (asm-label-offset asm label))
+                  (offset (asm-offset asm)))
+              (fn asm (- label-offset offset))))))))
+
+  (define (je-relative asm offset)
+    (emit asm
+          #x0f
+          #x84
+          (imm32 (- offset 6))))
+
+  (define (je asm label)
+    (jmp-helper asm label je-relative))
+
+  (define (jne-relative asm offset)
+    (emit asm
+          #x0f
+          #x85
+          (imm32 (- offset 6))))
+
+  (define (jne asm label)
+    (jmp-helper asm label jne-relative))
+
+  (define (test asm value)
+    (emit asm
+          (rex-prefix 1 0 0 0)
+          #xa9
+          (imm32 value)))
+
+  (define (add asm dst src)
+    (cond
+     ((and (register? dst) (number? src))
+      (emit asm
+            (rex-prefix 1 0 0 0)
+            #x81
+            (+ #xc0 (register-opcode dst))
+            (imm32 src)))
+     (else
+      (raise "unrecognized/unhandled operand[s]"))))
+
+  (define (sub asm dst src)
+    (cond
+     ((and (register? dst) (number? src))
+      (emit asm
+            (rex-prefix 1 0 0 0)
+            #x81
+            (+ #xe8 (register-opcode dst))
+            (imm32 src)))
+     (else
+      (raise "unrecognized/unhandled operand[s]"))))
 
   (define-syntax assert-equal
     (syntax-rules ()
@@ -243,40 +304,35 @@
 	 (display (format "failed assertion: ~a != ~a" x y))
 	 (newline)))))
 
-  (define-syntax test
-    (syntax-rules (assert-equal)
-      ((_ name instrs ...)
-       (begin
-	 instrs ...))))
+  (define (patch-asm-stream asm patch offset)
+    (let ((mc (asm-read-value! asm)))
+      (bytevector-copy! patch 0
+                        mc offset
+                        (bytevector-length patch))
+      (asm-value! asm mc)))
 
-  (define (resolve-labels asm instrs)
-    (let loop ((cells (vector->list (hashtable-cells (asm-deferred asm)))))
-      (when (and cells (not (null? cells)))
-        (let* ((cell (car cells))
-               (label (car cell))
-               (offsets (cdr cell))
-               (label-offset (asm-label-offset asm label)))
-          (let label-loop ((o offsets))
-            (unless (null? o)
-              (let* ((offset (car o))
-                     (patch (with-asm (jmp-relative (- label-offset offset))))
-                     (mc (asm-read-value! asm)))
-                ;; (disasm patch (current-error-port))
-                ;; patch dummy jump
-                (bytevector-copy! patch 0
-                                  mc offset
-                                  (bytevector-length patch))
-                (asm-value! asm mc)
-                (label-loop (cdr o)))))
-          (loop (cdr cells)))))
-    instrs)
+  ;; Replaces placeholder instructions which were unable to be correctly
+  ;; encoded at read time. This happens mostly for jump instructions
+  ;; which target labels which are not yet defined.
+  (define (resolve-deferred-instr asm intr)
+    (let loop ((deferred (unbox (asm-deferred-instr asm))))
+      (unless (null? deferred)
+        (let* ((pair (car deferred))
+               (fn (car pair))
+               (off (cdr pair))
+               (patch (with-asm-labels-offset asm off (lambda (asm) (fn asm)))))
+          (patch-asm-stream asm patch off))
+        (loop (cdr deferred)))))
+
+  (define (resolve-all asm instrs)
+    (resolve-deferred-instr asm instrs))
 
   (define-syntax asm
     (syntax-rules ()
       ((_ out xs ...)
        (begin
-         (resolve-labels out
-                         (asm-syntax out xs ...))))))
+         (resolve-all out
+                      (asm-syntax out xs ...))))))
 
   (define-syntax with-asm
     (syntax-rules ()
@@ -284,6 +340,16 @@
        (let ((out (make-asm)))
          (asm out xs ...)
          (asm-value out)))))
+
+  (define (with-asm-labels asm fn)
+    (let ((out (make-asm)))
+      (set-car! out (hashtable-copy (asm-labels asm)))
+         (fn out)
+         (asm-value out)))
+
+  (define (with-asm-labels-offset asm offset fn)
+    (parameterize ((asm-offset- (lambda (asm) offset)))
+      (with-asm-labels asm fn)))
 
   ;; syntax sugar to allow writing:
   ;; > (asm out (instr) (instr))
@@ -312,10 +378,15 @@
                 (newline)
                 (loop))))))))
 
+  (define-syntax deftest
+    (syntax-rules (assert-equal)
+      ((_ name instrs ...)
+       (begin
+	 instrs ...))))
 
   (define (test-schasm)
-    (test "imm16" (assert-equal (imm16 20) '(20 0)))
-    (test "imm16 byte-order"
+    (deftest "imm16" (assert-equal (imm16 20) '(20 0)))
+    (deftest "imm16 byte-order"
 	  (assert-equal (imm16 1) '(1 0)))
-    (test "imm64 byte-order"
+    (deftest "imm64 byte-order"
 	  (assert-equal (imm64 1) '(1 0 0 0 0 0 0 0)))))

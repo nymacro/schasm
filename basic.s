@@ -1,7 +1,9 @@
         .text
         .globl tst_sym
         .align 4
-        movq $20, %rax
+        movq $200000000000, %rax
         push %rbp
         mov %rsp, %rbp
         pop %rbp
+        addq $10000001, %rbx
+        subq $10000001, %rbx
