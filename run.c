@@ -18,6 +18,7 @@
 typedef int (*JMP_TO)(void);
 
 void test_func(void) {
+  write(1, NULL, 0);
   return;
 }
 

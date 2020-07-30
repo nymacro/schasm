@@ -38,24 +38,16 @@
 
      ;; loop some times
      (mov %r8 10)
-     (sub %r8 1)
      (label 'loop)
 
      ;; syscall to write
-     ;; (push %rax)
-     ;; (push 10) ;; fd
-     ;; (push random-string) ;; str
-     ;; (push 1) ;; str-len
-     ;; (mov %rax 4) ;; write
-     ;; (int #x80)
+     (mov %rax 4) ; write
+     (mov %rbx 1) ; fd
+     (mov %rcx 0) ; str-ptr
+     (mov %rdx 0) ; str-len
+     (int #x80)
 
-     ;; (pop %rax)
-     ;; (pop %rax)
-     ;; (pop %rax)
-     ;; (pop %rax)
-
-
-     (sub %rax 1)
+     (sub %r8 1)
      (test 0)
      (jne 'loop)
 
