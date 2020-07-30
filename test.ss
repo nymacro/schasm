@@ -30,13 +30,31 @@
 
 ;; (test-schasm)
 
+(define random-string (foreign-alloc 10))
+
 (asm out
      ;; save rbp
      (push %rbp)
 
      ;; loop some times
-     (mov %rax 10)
+     (mov %r8 10)
+     (sub %r8 1)
      (label 'loop)
+
+     ;; syscall to write
+     ;; (push %rax)
+     ;; (push 10) ;; fd
+     ;; (push random-string) ;; str
+     ;; (push 1) ;; str-len
+     ;; (mov %rax 4) ;; write
+     ;; (int #x80)
+
+     ;; (pop %rax)
+     ;; (pop %rax)
+     ;; (pop %rax)
+     ;; (pop %rax)
+
+
      (sub %rax 1)
      (test 0)
      (jne 'loop)

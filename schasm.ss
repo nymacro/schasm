@@ -15,6 +15,8 @@
     add
     sub
 
+    int
+
     ;; registers
     %rax
     %rbx
@@ -59,10 +61,16 @@
 	 (emit asm instr)
 	 (emit asm xinstr ...)))))
 
-  (define register (make-record-type "register" '(x)))
+  (define register (make-record-type "register" '(x y)))
   (define make-register (record-constructor register))
   (define register? (record-predicate register))
   (define register-opcode (record-accessor register 0))
+  (define register-extended? (record-accessor register 1))
+
+  (define (rex-i-register? register)
+    (if (register-extended? register)
+        1
+        0))
 
   ;; TODO what is this again???
   (define (rex-prefix w r x b)
@@ -72,23 +80,23 @@
            (fxarithmetic-shift-left x 1)
            b))
 
-  (define %rax (make-register 0))
-  (define %rdx (make-register 1))
-  (define %rcx (make-register 2))
-  (define %rbx (make-register 3))
-  (define %rbp (make-register 4))
-  (define %rsp (make-register 5))
-  (define %rsi (make-register 6))
-  (define %rdi (make-register 7))
+  (define %rax (make-register 0 #f))
+  (define %rdx (make-register 1 #f))
+  (define %rcx (make-register 2 #f))
+  (define %rbx (make-register 3 #f))
+  (define %rbp (make-register 4 #f))
+  (define %rsp (make-register 5 #f))
+  (define %rsi (make-register 6 #f))
+  (define %rdi (make-register 7 #f))
 
-  (define %r8  (make-register 0))
-  (define %r9  (make-register 1))
-  (define %r10 (make-register 2))
-  (define %r11 (make-register 3))
-  (define %r12 (make-register 4))
-  (define %r13 (make-register 5))
-  (define %r14 (make-register 6))
-  (define %r15 (make-register 7))
+  (define %r8  (make-register 0 #t))
+  (define %r9  (make-register 1 #t))
+  (define %r10 (make-register 2 #t))
+  (define %r11 (make-register 3 #t))
+  (define %r12 (make-register 4 #t))
+  (define %r13 (make-register 5 #t))
+  (define %r14 (make-register 6 #t))
+  (define %r15 (make-register 7 #t))
 
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
@@ -155,6 +163,9 @@
              (cons (fxand x #xff) result))))
     (out x bytes '()))
 
+  (define (imm8 x)
+    (car (encode-integer x 1)))
+
   (define (imm16 x)
     (let* ([m (encode-integer x 1)]
 	   [l (encode-integer (cadr m) 1)])
@@ -172,14 +183,14 @@
 
   (define (imm32->reg asm register imm)
     (emit asm
-          (rex-prefix 1 0 0 0)
+          (rex-prefix 1 0 0 (rex-i-register? register))
 	  #xc7
           (+ #xc0 (register-opcode register))
 	  (imm32 imm)))
 
   (define (imm64->reg asm register imm)
     (emit asm
-          (rex-prefix 1 0 0 0)
+          (rex-prefix 1 0 0 (rex-i-register? register))
 	  (+ #xb8 (register-opcode register))
 	  (imm64 imm)))
 
@@ -214,6 +225,11 @@
     (cond
      ((register? src)
       (emit asm (+ #x51 (register-opcode src))))
+     ((number? src)
+      (let* ([m (imm32 src)]
+             [l (imm32 (fxarithmetic-shift-right src 32))])
+        (emit asm #x68 m)
+        (emit asm #x68 l)))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
@@ -279,7 +295,7 @@
     (cond
      ((and (register? dst) (number? src))
       (emit asm
-            (rex-prefix 1 0 0 0)
+            (rex-prefix 1 0 0 (rex-i-register? dst))
             #x81
             (+ #xc0 (register-opcode dst))
             (imm32 src)))
@@ -290,19 +306,17 @@
     (cond
      ((and (register? dst) (number? src))
       (emit asm
-            (rex-prefix 1 0 0 0)
+            (rex-prefix 1 0 0 (rex-i-register? dst))
             #x81
             (+ #xe8 (register-opcode dst))
             (imm32 src)))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
-  (define-syntax assert-equal
-    (syntax-rules ()
-      ((_ x y)
-       (unless (equal? x y)
-	 (display (format "failed assertion: ~a != ~a" x y))
-	 (newline)))))
+  (define (int asm num)
+    (emit asm
+          #xcd
+          (imm8 num)))
 
   (define (patch-asm-stream asm patch offset)
     (let ((mc (asm-read-value! asm)))
@@ -383,6 +397,13 @@
       ((_ name instrs ...)
        (begin
 	 instrs ...))))
+
+  (define-syntax assert-equal
+    (syntax-rules ()
+      ((_ x y)
+       (unless (equal? x y)
+	 (display (format "failed assertion: ~a != ~a" x y))
+	 (newline)))))
 
   (define (test-schasm)
     (deftest "imm16" (assert-equal (imm16 20) '(20 0)))
