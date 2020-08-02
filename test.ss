@@ -36,6 +36,8 @@
      ;; save rbp
      (push %rbp)
 
+     ;; (data 'my-data #x98)
+
      ;; loop some times
      (mov %r8 10)
      (label 'loop)
@@ -77,7 +79,7 @@
      (ret))
 
 (let ([bin (asm-value out)])
-  (disasm bin (current-error-port))
+  ;; (disasm bin (current-error-port))
   (print-hex bin (current-output-port)))
 
 (flush-output-port (current-output-port))

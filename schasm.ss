@@ -17,6 +17,8 @@
 
     int
 
+    data
+
     ;; registers
     %rax
     %rbx
@@ -317,6 +319,13 @@
     (emit asm
           #xcd
           (imm8 num)))
+
+  (define (data asm name d)
+    (let ((end-label-name (gensym)))
+      (jmp asm end-label-name)
+      (label asm name)
+      (emit asm d)
+      (label asm end-label-name)))
 
   (define (patch-asm-stream asm patch offset)
     (let ((mc (asm-read-value! asm)))
