@@ -14,10 +14,12 @@
     label
     add
     sub
+    lea
 
     int
 
     data
+    data-string
 
     ;; registers
     %rax
@@ -83,11 +85,11 @@
            b))
 
   (define %rax (make-register 0 #f))
-  (define %rdx (make-register 1 #f))
-  (define %rcx (make-register 2 #f))
+  (define %rcx (make-register 1 #f))
+  (define %rdx (make-register 2 #f))
   (define %rbx (make-register 3 #f))
-  (define %rbp (make-register 4 #f))
-  (define %rsp (make-register 5 #f))
+  (define %rsp (make-register 4 #f))
+  (define %rbp (make-register 5 #f))
   (define %rsi (make-register 6 #f))
   (define %rdi (make-register 7 #f))
 
@@ -198,9 +200,10 @@
 
   (define (reg64->reg64 asm dst src)
     (emit asm
-          #x48
-          (+ #x85 (register-opcode dst))
-          (+ #xe0 (register-opcode src))))
+          (rex-prefix 1 0 0 0)
+          #x89
+          (+ #xc0 (fxarithmetic-shift-left (register-opcode src) 3)
+             (register-opcode dst))))
 
   (define (label asm name)
     (eq-hashtable-set! (asm-labels asm) 
@@ -320,12 +323,38 @@
           #xcd
           (imm8 num)))
 
-  (define (data asm name d)
+  (define (data asm name . d)
     (let ((end-label-name (gensym)))
       (jmp asm end-label-name)
       (label asm name)
-      (emit asm d)
+      (let loop ((c d))
+        (unless (null? c)
+          (emit asm (car c))
+          (loop (cdr c))))
       (label asm end-label-name)))
+
+  (define (data-string asm name string)
+    (apply data `(,asm ,name ,@(bytevector->u8-list (string->utf8 string)))))
+
+  ;; TODO addressing modes. Right now offset is relative to %rip
+  (define (lea-helper asm register offset)
+    ;; -6 is magical instr relative number
+    (emit asm
+          (rex-prefix 1 0 0 (rex-i-register? register))
+          #x8d
+          (+ #x05
+             (fxarithmetic-shift-left (register-opcode register) 3))
+          (imm32 (- offset 6))))
+
+  (define (lea asm dst label)
+    (let ((fn lea-helper)
+          (offset (asm-offset asm)))
+      (fn asm dst 0)
+      (defer-instr asm offset
+        (lambda (asm)
+          (let ((label-offset (asm-label-offset asm label))
+                (offset (asm-offset asm)))
+            (fn asm dst (- label-offset offset)))))))
 
   (define (patch-asm-stream asm patch offset)
     (let ((mc (asm-read-value! asm)))
@@ -389,7 +418,7 @@
     (parameterize ((current-output-port port))
       (let ([transcoder (make-transcoder (utf-8-codec) (eol-style lf)
                                          (error-handling-mode replace))])
-        (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble -show-encoding" 'block transcoder)])
+        (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble -show-encoding -triple=x86_64-portbld-freebsd12.0" 'block transcoder)])
           (for-each (lambda (x) (display (format "~a " x) stdin))
                     (bytevector->u8-list instrs))
           (close-output-port stdin)

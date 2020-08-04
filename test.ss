@@ -1,6 +1,7 @@
 (library-directories ".")
 (import (schasm)
-	(chezscheme))
+	(chezscheme)
+        (rnrs))
 
 (define out (make-asm))
 
@@ -36,51 +37,75 @@
      ;; save rbp
      (push %rbp)
 
-     ;; (data 'my-data #x98)
+     ;; register tests
+     ;; (mov %rax %rax)
+     ;; (mov %rcx %rax)
+     ;; (mov %rdx %rax)
+     ;; (mov %rbx %rax)
+     ;; (mov %rbp %rax)
+     ;; (mov %rsi %rax)
+     ;; (mov %rdi %rax)
 
-     ;; loop some times
-     (mov %r8 10)
-     (label 'loop)
+     ;; ;; loop some times
+     ;; (mov %r8 10)
+     ;; (label 'loop)
+
+     ;; syscall to exit
+     ;; (mov %rax 1) ; exit
+     ;; (mov %rdi 1) ; retval
+     ;; (int #x80)
 
      ;; syscall to write
      (mov %rax 4) ; write
-     (mov %rbx 1) ; fd
-     (mov %rcx 0) ; str-ptr
-     (mov %rdx 0) ; str-len
+     (mov %rdi 1) ; fd
+     ;(mov %rsi 0) ; ptr
+     (lea %rsi 'my-data) ; ptr
+     (mov %rdx 6) ; len
      (int #x80)
 
-     (sub %r8 1)
-     (test 0)
-     (jne 'loop)
+     ;; (sub %r8 1)
+     ;; (test 0)
+     ;; (jne 'loop)
 
-     ;; stuff
-     (jmp 'hello)
+     ;; ;; ;; stuff
+     ;; ;; (jmp 'hello)
 
-     (mov %rax 10)
-     (je 'hello)
-     (mov %rax 10)
+     ;; ;; (mov %rax 10)
+     ;; ;; (je 'hello)
+     ;; ;; (mov %rax 10)
 
-     (label 'hello)
-     (jmp 'return)
-     (mov %rax 40)
-     (mov %rax 40)
-     (mov %rax 40)
-     (label 'return)
+     ;; ;; (label 'hello)
+     ;; ;; (jmp 'return)
+     ;; ;; (mov %rax 40)
+     ;; ;; (mov %rax 40)
+     ;; ;; (mov %rax 40)
+     ;; ;; (label 'return)
+
+     ;; ;; ;; return value
+     ;; ;; (mov %rax 20)
+     ;; ;; (add %rax 20)
+     ;; ;; (sub %rax 2)
+
+     ;; (label 'done)
+     ;; (mov %rax %r8)
 
      ;; restore rbp
-     (mov %rbp %rsp)
+     ;; (mov %rbp %rsp)
      (pop %rbp)
 
-     ;; return value
-     (mov %rax 20)
-     (add %rax 20)
-     (sub %rax 2)
+     (ret)
 
-     (ret))
+     (data-string 'my-data "hello\n")
+     (nop))
 
-(let ([bin (asm-value out)])
-  ;; (disasm bin (current-error-port))
-  (print-hex bin (current-output-port)))
+(define (run)
+  (let ([bin (asm-value out)])
+    (disasm bin (current-error-port))
+    (print-hex bin (current-error-port))(newline)
+    (flush-output-port (current-error-port))
+    bin))
 
-(flush-output-port (current-output-port))
-(exit)
+(when (or (null? (command-line))
+          (eq? (car (command-line)) ""))
+  (run)
+  (exit))
