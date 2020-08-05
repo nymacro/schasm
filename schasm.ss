@@ -9,6 +9,7 @@
     je
     jne
     test
+    cmp
     nop
     ret
     label
@@ -200,9 +201,10 @@
 
   (define (reg64->reg64 asm dst src)
     (emit asm
-          (rex-prefix 1 0 0 0)
+          (rex-prefix 1 (rex-i-register? src) 0 (rex-i-register? dst))
           #x89
-          (+ #xc0 (fxarithmetic-shift-left (register-opcode src) 3)
+          (+ #xc0
+             (fxarithmetic-shift-left (register-opcode src) 3)
              (register-opcode dst))))
 
   (define (label asm name)
@@ -229,7 +231,7 @@
   (define (push asm src)
     (cond
      ((register? src)
-      (emit asm (+ #x51 (register-opcode src))))
+      (emit asm (+ #x50 (register-opcode src))))
      ((number? src)
       (let* ([m (imm32 src)]
              [l (imm32 (fxarithmetic-shift-right src 32))])
@@ -241,7 +243,7 @@
   (define (pop asm dst)
     (cond
      ((register? dst)
-      (emit asm (+ #x59 (register-opcode dst))))
+      (emit asm (+ #x58 (register-opcode dst))))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
@@ -259,18 +261,13 @@
     (jmp-helper asm label jmp-relative))
 
   (define (jmp-helper asm label fn)
-    (let* ((offset (asm-offset asm))
-           (predefp (label-defined? asm label))
-           (label-offset (if predefp
-                           (asm-label-offset asm label)
-                           0)))
-      (fn asm (- label-offset offset))
-      (unless predefp
-        (defer-instr asm offset
-          (lambda (asm)
-            (let ((label-offset (asm-label-offset asm label))
-                  (offset (asm-offset asm)))
-              (fn asm (- label-offset offset))))))))
+    (let* ((offset (asm-offset asm)))
+      (fn asm 0)
+      (defer-instr asm offset
+        (lambda (asm)
+          (let ((label-offset (asm-label-offset asm label))
+                (offset (asm-offset asm)))
+            (fn asm (- label-offset offset)))))))
 
   (define (je-relative asm offset)
     (emit asm
@@ -290,10 +287,18 @@
   (define (jne asm label)
     (jmp-helper asm label jne-relative))
 
-  (define (test asm value)
+  (define (test asm dst value)
     (emit asm
-          (rex-prefix 1 0 0 0)
-          #xa9
+          (rex-prefix 1 0 0 (rex-i-register? dst))
+          #xf7
+          (+ #xc0 (fxarithmetic-shift-left (register-opcode dst) 3))
+          (imm32 value)))
+
+  (define (cmp asm dst value)
+    (emit asm
+          (rex-prefix 1 0 0 (rex-i-register? dst))
+          #x81
+          (+ #xf8 (register-opcode dst))
           (imm32 value)))
 
   (define (add asm dst src)
@@ -304,6 +309,12 @@
             #x81
             (+ #xc0 (register-opcode dst))
             (imm32 src)))
+     ((and (register? dst) (register? src))
+      (emit asm
+            (rex-prefix 1 0 0 (rex-i-register? dst))
+            #x01
+            (+ #xb9 (fxarithmetic-shift-left (register-opcode dst) 3)
+               (register-opcode src))))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 

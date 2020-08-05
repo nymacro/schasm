@@ -66,7 +66,8 @@ int main(int argc, char *argv[]) {
 
   /* jump to loaded code */
   JMP_TO jmp = (JMP_TO)mm;
-  printf("Returned: %i\n", jmp());
+  int ret = jmp();
+  printf("Returned: %i\n", ret);
 
  done:
   if (mm) munmap(mm, sz);

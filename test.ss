@@ -34,8 +34,11 @@
 (define random-string (foreign-alloc 10))
 
 (asm out
-     ;; save rbp
+     ;; save regs
      (push %rbp)
+     (push %rdi)
+     (push %rsi)
+     (push %rsp)
 
      ;; register tests
      ;; (mov %rax %rax)
@@ -46,51 +49,35 @@
      ;; (mov %rsi %rax)
      ;; (mov %rdi %rax)
 
-     ;; ;; loop some times
-     ;; (mov %r8 10)
-     ;; (label 'loop)
+     ;; (test %rax 0)
+     ;; (test %rcx 0)
+     ;; (test %rdx 0)
+     ;; (test %r8 0)
 
-     ;; syscall to exit
-     ;; (mov %rax 1) ; exit
-     ;; (mov %rdi 1) ; retval
-     ;; (int #x80)
+     ;; loop some times
+     (mov %r8 10)
+     (mov %r9 0)
+     (label 'loop)
 
      ;; syscall to write
      (mov %rax 4) ; write
      (mov %rdi 1) ; fd
-     ;(mov %rsi 0) ; ptr
      (lea %rsi 'my-data) ; ptr
      (mov %rdx 6) ; len
      (int #x80)
 
-     ;; (sub %r8 1)
-     ;; (test 0)
-     ;; (jne 'loop)
+     (add %r9 %rax)
 
-     ;; ;; ;; stuff
-     ;; ;; (jmp 'hello)
+     (sub %r8 1)
+     (cmp %r8 0)
+     (jne 'loop)
 
-     ;; ;; (mov %rax 10)
-     ;; ;; (je 'hello)
-     ;; ;; (mov %rax 10)
+     (mov %rax %r9)
 
-     ;; ;; (label 'hello)
-     ;; ;; (jmp 'return)
-     ;; ;; (mov %rax 40)
-     ;; ;; (mov %rax 40)
-     ;; ;; (mov %rax 40)
-     ;; ;; (label 'return)
-
-     ;; ;; ;; return value
-     ;; ;; (mov %rax 20)
-     ;; ;; (add %rax 20)
-     ;; ;; (sub %rax 2)
-
-     ;; (label 'done)
-     ;; (mov %rax %r8)
-
-     ;; restore rbp
-     ;; (mov %rbp %rsp)
+     ;; restore regs
+     (pop %rsp)
+     (pop %rsi)
+     (pop %rdi)
      (pop %rbp)
 
      (ret)
