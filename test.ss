@@ -60,11 +60,15 @@
      (label 'loop)
 
      ;; syscall to write
-     (mov %rax 4) ; write
-     (mov %rdi 1) ; fd
-     (lea %rsi 'my-data) ; ptr
-     (mov %rdx 6) ; len
-     (int #x80)
+     ;; (mov %rax 4) ; write
+     ;; (mov %rdi 1) ; fd
+     ;; (lea %rsi 'my-data) ; ptr
+     ;; (mov %rdx 6) ; len
+     ;; (int #x80)
+
+     (lea %rax 'my-data)
+     (mov %rdx 6)
+     (call 'print)
 
      (add %r9 %rax)
 
@@ -82,7 +86,17 @@
 
      (ret)
 
+     ;; rax <- ptr
+     ;; rdx <- len
+     (subr 'print
+           (mov %rsi %rax)
+           (mov %rax 4) ; write
+           (mov %rdi 1) ; fd
+           (int #x80)
+           (ret))
+
      (data-string 'my-data "hello\n")
+     (data-string 'other-data "subr\n")
      (nop))
 
 (define (run)

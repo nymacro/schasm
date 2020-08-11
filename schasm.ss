@@ -18,9 +18,11 @@
     lea
 
     int
+    call
 
     data
     data-string
+    subr
 
     ;; registers
     %rax
@@ -333,6 +335,28 @@
     (emit asm
           #xcd
           (imm8 num)))
+
+  (define (call-helper asm offset)
+    ;; 5-byte instr
+    (emit asm
+          (rex-prefix 1 0 0 0)
+          #xe8
+          (imm32 (- offset 5))))
+
+  (define (call asm label)
+    (let ((offset (asm-offset asm)))
+      (call-helper asm 0)
+      (defer-instr asm offset
+        (lambda (asm)
+          (let ((label-offset (asm-label-offset asm label))
+                (offset (asm-offset asm)))
+            (call-helper asm (- label-offset offset)))))))
+
+  (define-syntax subr
+    (syntax-rules ()
+      ((_ asm name instrs ...)
+       (asm-syntax asm (label name)
+                   instrs ...))))
 
   (define (data asm name . d)
     (let ((end-label-name (gensym)))

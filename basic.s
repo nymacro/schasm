@@ -15,4 +15,6 @@
 
         popq %rbp
 
+        call tst_sym
+
         retq
