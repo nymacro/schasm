@@ -221,12 +221,12 @@
   (define (ret asm)
     (emit asm #xc3))
 
-  (define (mov asm a b)
+  (define (mov asm dst src)
     (cond
-     ((and (register? a) (number? b))
-      (imm64->reg asm a b))
-     ((and (register? a) (register? b))
-      (reg64->reg64 asm a b))
+     ((and (register? dst) (number? src))
+      (imm64->reg asm dst src))
+     ((and (register? dst) (register? src))
+      (reg64->reg64 asm dst src))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
@@ -249,9 +249,6 @@
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
-  (define (label-defined? asm label)
-    (hashtable-contains? (asm-labels asm) label))
-
   (define (jmp-relative asm offset)
     ;; offset based on next instruction
     ;; -5 is magic value (1 + 4 bytes)
@@ -259,6 +256,7 @@
           #xe9 ; 32-bit offset
           (imm32 (- offset 5))))
 
+  ;; jump to label
   (define (jmp asm label)
     (jmp-helper asm label jmp-relative))
 
@@ -352,12 +350,14 @@
                 (offset (asm-offset asm)))
             (call-helper asm (- label-offset offset)))))))
 
+  ;; define a subroutine with name
   (define-syntax subr
     (syntax-rules ()
       ((_ asm name instrs ...)
        (asm-syntax asm (label name)
                    instrs ...))))
 
+  ;; define simple data octets
   (define (data asm name . d)
     (let ((end-label-name (gensym)))
       (jmp asm end-label-name)
@@ -368,6 +368,7 @@
           (loop (cdr c))))
       (label asm end-label-name)))
 
+  ;; define string data
   (define (data-string asm name string)
     (apply data `(,asm ,name ,@(bytevector->u8-list (string->utf8 string)))))
 
@@ -391,6 +392,7 @@
                 (offset (asm-offset asm)))
             (fn asm dst (- label-offset offset)))))))
 
+  ;; helper function to patch/overwrite a section of bytevector
   (define (patch-asm-stream asm patch offset)
     (let ((mc (asm-read-value! asm)))
       (bytevector-copy! patch 0
@@ -428,12 +430,14 @@
          (asm out xs ...)
          (asm-value out)))))
 
+  ;; emit instructions in a new environment, copying labels from an existing environment
   (define (with-asm-labels asm fn)
     (let ((out (make-asm)))
       (set-car! out (hashtable-copy (asm-labels asm)))
          (fn out)
          (asm-value out)))
 
+  ;; emit instructions in an environment with seperate offset
   (define (with-asm-labels-offset asm offset fn)
     (parameterize ((asm-offset- (lambda (asm) offset)))
       (with-asm-labels asm fn)))

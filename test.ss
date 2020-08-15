@@ -106,7 +106,10 @@
     (flush-output-port (current-error-port))
     bin))
 
-(when (or (null? (command-line))
-          (eq? (car (command-line)) ""))
+(define (run-from-shell?)
+  (or (null? (command-line))
+      (eq? (car (command-line)) "")))
+
+(when (run-from-shell?)
   (run)
   (exit))
