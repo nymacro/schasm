@@ -52,6 +52,9 @@
 
     disasm
 
+    instr
+    asm-instr-syntax
+
     ;; testing
     test-schasm)
   (import (chezscheme))
@@ -469,22 +472,54 @@
                 (newline)
                 (loop))))))))
 
-  (define-syntax deftest
-    (syntax-rules (assert-equal)
-      ((_ name instrs ...)
-       (begin
-	 instrs ...))))
-
   (define-syntax assert-equal
     (syntax-rules ()
       ((_ x y)
        (unless (equal? x y)
-	 (display (format "failed assertion: ~a != ~a" x y))
-	 (newline)))))
+	 (display (format "failed assertion: ~a != ~a~%" x y))))))
+
+  (define-syntax deftest
+    (syntax-rules ()
+      ((_ name instrs ...)
+       (begin
+         (display (format "~a~%" name))
+	 instrs ...))))
+
+  (define-syntax op-mode
+    (syntax-rules (rel abs)
+      ((_ (rel i)) (cons 'rel i))
+      ((_ (abs i)) (cons 'abs i))
+      ((_ a) 'a)))
+  (define-syntax instr
+    (syntax-rules ()
+      ((_ op) (list 'op))
+      ((_ op a) (list 'op (op-mode a)))
+      ((_ op a b) (list 'op (op-mode a) (op-mode b)))))
+
+  (define-syntax asm-instr-syntax
+    (syntax-rules ()
+      ((_ (x)) (instr x))
+      ((_ (x a)) (instr x a))
+      ((_ (x a b)) (instr x a b))
+      ((_ x xs ...)
+       (list
+         (asm-instr-syntax x)
+         (asm-instr-syntax xs ...)))))
 
   (define (test-schasm)
     (deftest "imm16" (assert-equal (imm16 20) '(20 0)))
     (deftest "imm16 byte-order"
-	  (assert-equal (imm16 1) '(1 0)))
+      (assert-equal (imm16 1) '(1 0)))
+    (deftest "imm32 byte-order"
+      (assert-equal (imm32 1) '(1 0 0 0)))
     (deftest "imm64 byte-order"
-	  (assert-equal (imm64 1) '(1 0 0 0 0 0 0 0)))))
+      (assert-equal (imm64 1) '(1 0 0 0 0 0 0 0)))
+
+    (deftest "instr binary rel"
+      (assert-equal (instr mov (rel 10) (rel 20)) '(mov (rel . 10) (rel . 20))))
+    (deftest "instr binary abs"
+      (assert-equal (instr mov (abs 10) (rel 20)) '(mov (abs . 10) (rel . 20))))
+    (deftest "instr unary"
+      (assert-equal (instr mov 10) '(mov 10)))
+    (deftest "instr nullary"
+      (assert-equal (instr mov) '(mov)))))

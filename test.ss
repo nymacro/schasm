@@ -111,5 +111,7 @@
       (eq? (car (command-line)) "")))
 
 (when (run-from-shell?)
+  (test-schasm)
   (run)
-  (exit))
+  (exit)
+  )
