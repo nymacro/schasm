@@ -71,11 +71,9 @@
 	 (emit asm instr)
 	 (emit asm xinstr ...)))))
 
-  (define register (make-record-type "register" '(x y)))
-  (define make-register (record-constructor register))
-  (define register? (record-predicate register))
-  (define register-opcode (record-accessor register 0))
-  (define register-extended? (record-accessor register 1))
+  (define-record-type register
+    (nongenerative)
+    (fields opcode extended?))
 
   (define (rex-i-register? register)
     (if (register-extended? register)
@@ -133,12 +131,12 @@
     (put-bytevector (asm-port asm) value)
     value)
 
-  (define asm-offset-
+  (define asm-offset$
     (make-parameter
      (lambda (asm) (bytevector-length (asm-value asm)))))
 
   (define (asm-offset asm)
-    ((asm-offset-) asm))
+    ((asm-offset$) asm))
 
   (define (asm-deferred-instr asm)
     (caddr asm))
@@ -442,7 +440,7 @@
 
   ;; emit instructions in an environment with seperate offset
   (define (with-asm-labels-offset asm offset fn)
-    (parameterize ((asm-offset- (lambda (asm) offset)))
+    (parameterize ((asm-offset$ (lambda (asm) offset)))
       (with-asm-labels asm fn)))
 
   ;; syntax sugar to allow writing:
