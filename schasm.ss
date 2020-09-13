@@ -1,3 +1,4 @@
+;;;; Copyright (c) 2020, Aaron Marks
 (library
     (schasm)
   (export
@@ -209,6 +210,13 @@
           (+ #xc0
              (fxarithmetic-shift-left (register-opcode src) 3)
              (register-opcode dst))))
+
+  (define (mem->reg64 asm dst src)
+    (emit asm
+          (rex-prefix 1 0 0 (rex-i-register? dst))
+          #x8b
+          (+ #xc0 (register-opcode dst))
+          (imm64 src)))
 
   (define (label asm name)
     (eq-hashtable-set! (asm-labels asm) 
@@ -487,6 +495,7 @@
     (syntax-rules (rel abs)
       ((_ (rel i)) (cons 'rel i))
       ((_ (abs i)) (cons 'abs i))
+      ((_ (mem i)) (cons 'mem i))
       ((_ a) 'a)))
   (define-syntax instr
     (syntax-rules ()

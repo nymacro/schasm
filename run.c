@@ -1,3 +1,4 @@
+/* Copyright (c) 2020, Aaron Marks */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,8 +21,6 @@ void test_func(void) {
   write(1, NULL, 0);
   return;
 }
-
-#define CHEZ_LIBHOME "/home/nymacro/ChezScheme/INSTALL/lib/csv9.5.4/ta6fb"
 
 int main(int argc, char *argv[]) {
   void *mm = NULL;

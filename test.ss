@@ -1,3 +1,4 @@
+;;;; Copyright (c) 2020, Aaron Marks
 (library-directories ".")
 (import (schasm)
 	(chezscheme)
