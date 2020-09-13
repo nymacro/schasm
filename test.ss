@@ -5,20 +5,6 @@
 
 (define out (make-asm))
 
-(define (print-hex-pretty instrs port)
-  (parameterize ((current-output-port port))
-    (let ([n 0])
-      (for-each (lambda (x)
-                  (set! n (fx1+ n))
-                  (when (<= x 15)
-                    (display "0"))
-                  (display (format "~x" x))
-                  (when (= 0 (fxmod n 8))
-                    (display ":"))
-                  (when (= 0 (fxmod n 16))
-                    (newline)))
-                (bytevector->u8-list instrs)))))
-
 (define (print-hex instrs port)
   (parameterize ((current-output-port port))
     (let ([n 0])

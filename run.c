@@ -21,7 +21,7 @@ void test_func(void) {
   return;
 }
 
-#define CHEZ_LIBHOME "/home/nymacro/ChezScheme/INSTALL/lib/csv9.5.3/ta6fb"
+#define CHEZ_LIBHOME "/home/nymacro/ChezScheme/INSTALL/lib/csv9.5.4/ta6fb"
 
 int main(int argc, char *argv[]) {
   void *mm = NULL;
