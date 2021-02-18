@@ -20,6 +20,7 @@
 
     int
     call
+    syscall
 
     data
     data-string
@@ -358,6 +359,11 @@
           (let ((label-offset (asm-label-offset asm label))
                 (offset (asm-offset asm)))
             (call-helper asm (- label-offset offset)))))))
+
+  (define (syscall asm)
+    (cond
+     ((equal? (machine-type) 'ta6le) (emit asm #x0f #x05))
+     (else (int asm #x80))))
 
   ;; define a subroutine with name
   (define-syntax subr

@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
   printf("Len: %zu\n", sz);
 
   /* map memory so we can jump into it */
-  mm = mmap(NULL, sz, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANON, -1, 0);
+  mm = mmap(NULL, sz, PROT_WRITE, MAP_SHARED|MAP_ANON, -1, 0);
   if (mm == MAP_FAILED) {
     fprintf(stderr, "Failed to mmap region\n");
     goto done;

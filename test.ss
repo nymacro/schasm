@@ -18,6 +18,10 @@
 
 ;; (test-schasm)
 
+(define write-syscall (cond
+		       ((equal? (machine-type) 'ta6le) 1)
+		       ((equal? (machine-type) 'ta6fb) 4)))
+
 (define random-string (foreign-alloc 10))
 
 (asm out
@@ -77,9 +81,9 @@
      ;; rdx <- len
      (subr 'print
            (mov %rsi %rax)
-           (mov %rax 4) ; write
+           (mov %rax write-syscall) ; write
            (mov %rdi 1) ; fd
-           (int #x80)
+           (syscall)
            (ret))
 
      (data-string 'my-data "hello\n")
