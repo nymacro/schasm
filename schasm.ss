@@ -2,72 +2,72 @@
 (library
     (schasm)
   (export
-    ;; instructions
-    mov
-    push
-    pop
-    jmp
-    je
-    jne
-    test
-    cmp
-    nop
-    ret
-    label
-    add
-    sub
-    lea
+   ;; instructions
+   mov
+   push
+   pop
+   jmp
+   je
+   jne
+   test
+   cmp
+   nop
+   ret
+   label
+   add
+   sub
+   lea
 
-    int
-    call
-    syscall
+   int
+   call
+   syscall
 
-    data
-    data-string
-    subr
+   data
+   data-string
+   subr
 
-    ;; registers
-    %rax
-    %rbx
-    %rcx
-    %rdx
-    %rbp
-    %rsp
-    %rsi
-    %rdi
-    %r8
-    %r9
-    %r10
-    %r11
-    %r12
-    %r13
-    %r14
-    %r15
+   ;; registers
+   %rax
+   %rbx
+   %rcx
+   %rdx
+   %rbp
+   %rsp
+   %rsi
+   %rdi
+   %r8
+   %r9
+   %r10
+   %r11
+   %r12
+   %r13
+   %r14
+   %r15
 
-    ;; helpers
-    asm
-    with-asm
-    resolve-all
-    make-asm
-    asm-port
-    asm-value
+   ;; helpers
+   asm
+   with-asm
+   resolve-all
+   make-asm
+   asm-port
+   asm-value
 
-    disasm
+   disasm
 
-    instr
-    asm-instr-syntax
+   instr
+   asm-instr-syntax
 
-    ;; testing
-    test-schasm)
+   ;; testing
+   test-schasm)
   (import (chezscheme))
 
   (define-syntax emit
     (syntax-rules ()
       ((emit asm instr)
        (if (list? instr)
-         (for-each (lambda (x) (put-u8 (asm-port asm) x))
-                   instr)
-         (put-u8 (asm-port asm) instr)))
+           (for-each (lambda (x) (put-u8 (asm-port asm) x))
+                     instr)
+           (put-u8 (asm-port asm) instr)))
       ((emit asm instr xinstr ...)
        (begin
 	 (emit asm instr)
@@ -82,7 +82,6 @@
         1
         0))
 
-  ;; TODO what is this again???
   (define (rex-prefix w r x b)
     (fxior #b01000000
            (fxarithmetic-shift-left w 3)
@@ -167,10 +166,10 @@
   (define (encode-integer x bytes)
     (define (out x count result)
       (if (zero? count)
-        (list result x)
-        (out (fxarithmetic-shift-right x 8)
-             (- count 1)
-             (cons (fxand x #xff) result))))
+          (list result x)
+          (out (fxarithmetic-shift-right x 8)
+               (- count 1)
+               (cons (fxand x #xff) result))))
     (out x bytes '()))
 
   (define (imm8 x)
@@ -188,15 +187,8 @@
 
   (define (imm64 x)
     (let* ([m (imm32 x)]
-	   [l (imm32 (fxarithmetic-shift-right x 32))])
+           [l (imm32 (fxarithmetic-shift-right x 32))])
       (append m l)))
-
-  (define (imm32->reg asm register imm)
-    (emit asm
-          (rex-prefix 1 0 0 (rex-i-register? register))
-	  #xc7
-          (+ #xc0 (register-opcode register))
-	  (imm32 imm)))
 
   (define (imm64->reg asm register imm)
     (emit asm
@@ -389,7 +381,7 @@
 
   ;; TODO addressing modes. Right now offset is relative to %rip
   (define (lea-helper asm register offset)
-    ;; -6 is magical instr relative number
+    ;; -6 is magical instr relative offset
     (emit asm
           (rex-prefix 1 0 0 (rex-i-register? register))
           #x8d
@@ -418,7 +410,7 @@
   ;; Replaces placeholder instructions which were unable to be correctly
   ;; encoded at read time. This happens mostly for jump instructions
   ;; which target labels which are not yet defined.
-  (define (resolve-deferred-instr asm intr)
+  (define (resolve-deferred-instr asm)
     (let loop ((deferred (unbox (asm-deferred-instr asm))))
       (unless (null? deferred)
         (let* ((pair (car deferred))
@@ -428,15 +420,15 @@
           (patch-asm-stream asm patch off))
         (loop (cdr deferred)))))
 
-  (define (resolve-all asm instrs)
-    (resolve-deferred-instr asm instrs))
+  (define (resolve-all asm)
+    (resolve-deferred-instr asm))
 
   (define-syntax asm
     (syntax-rules ()
       ((_ out xs ...)
        (begin
-         (resolve-all out
-                      (asm-syntax out xs ...))))))
+         (asm-syntax out xs ...)
+         (resolve-all out)))))
 
   (define-syntax with-asm
     (syntax-rules ()
@@ -449,8 +441,8 @@
   (define (with-asm-labels asm fn)
     (let ((out (make-asm)))
       (set-car! out (hashtable-copy (asm-labels asm)))
-         (fn out)
-         (asm-value out)))
+      (fn out)
+      (asm-value out)))
 
   ;; emit instructions in an environment with seperate offset
   (define (with-asm-labels-offset asm offset fn)
@@ -468,13 +460,13 @@
          (operator out operands ...) ...))))
 
   ;; diassemble using llvm-mc
-  (define (disasm instrs port)
+  (define (disasm bin port)
     (parameterize ((current-output-port port))
       (let ([transcoder (make-transcoder (utf-8-codec) (eol-style lf)
                                          (error-handling-mode replace))])
-        (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble -show-encoding -triple=x86_64-portbld-freebsd12.0" 'block transcoder)])
+        (let-values ([(stdin stdout stderr pid) (open-process-ports "llvm-mc -disassemble -show-encoding -triple=x86_64-unknown-unknown" 'block transcoder)])
           (for-each (lambda (x) (display (format "~a " x) stdin))
-                    (bytevector->u8-list instrs))
+                    (bytevector->u8-list bin))
           (close-output-port stdin)
 
           (let loop ()
@@ -483,19 +475,6 @@
                 (display d)
                 (newline)
                 (loop))))))))
-
-  (define-syntax assert-equal
-    (syntax-rules ()
-      ((_ x y)
-       (unless (equal? x y)
-	 (display (format "failed assertion: ~a != ~a~%" x y))))))
-
-  (define-syntax deftest
-    (syntax-rules ()
-      ((_ name instrs ...)
-       (begin
-         (display (format "~a~%" name))
-	 instrs ...))))
 
   (define-syntax op-mode
     (syntax-rules (rel abs)
@@ -516,8 +495,34 @@
       ((_ (x a b)) (instr x a b))
       ((_ x xs ...)
        (list
-         (asm-instr-syntax x)
-         (asm-instr-syntax xs ...)))))
+        (asm-instr-syntax x)
+        (asm-instr-syntax xs ...)))))
+
+  (define-syntax assert-equal
+    (syntax-rules ()
+      ((_ x y)
+       (begin
+	 (let ((xx x)
+	       (yy y))
+	   (unless (equal? xx yy)
+	     (display (format "failed assertion: ~a != ~a~%" xx yy))))))))
+
+  (define-syntax deftest
+    (syntax-rules ()
+      ((_ name instrs ...)
+       (begin
+         (display (format "~a~%" name))
+	 instrs ...))))
+
+  (define-syntax assert-instr
+    (syntax-rules ()
+      ((_ instr exp)
+       (begin
+	 (let ((bin (with-asm instr)))
+	   (display bin)
+	   (let-values ([(out out-string) (open-string-output-port)])
+	     (disasm bin out)
+	     (assert-equal (out-string) exp)))))))
 
   (define (test-schasm)
     (deftest "imm16" (assert-equal (imm16 20) '(20 0)))
@@ -535,4 +540,7 @@
     (deftest "instr unary"
       (assert-equal (instr mov 10) '(mov 10)))
     (deftest "instr nullary"
-      (assert-equal (instr mov) '(mov)))))
+      (assert-equal (instr mov) '(mov)))
+
+    (deftest "mov imm->reg"
+      (assert-instr (mov %rax 10) "movabsq $10, %rax"))))
