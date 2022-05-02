@@ -10,7 +10,6 @@
 #include <sys/mman.h> /* for mmap */
 
 #include <scheme.h>
-#include <equates.h>
 
 /*
  * return value: %rax
