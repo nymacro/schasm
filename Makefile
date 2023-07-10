@@ -1,17 +1,20 @@
 CHEZ_ARCH:=ta6fb
-CHEZ_VER:=9.5.6
+CHEZ_VER:=9.5.8
 
 CHEZ_LIBHOME=${CHEZ_HOME}/lib/csv${CHEZ_VER}/${CHEZ_ARCH}
 CFLAGS=-Wall -I$(CHEZ_LIBHOME) -L$(CHEZ_LIBHOME) \
  -DCHEZ_LIBHOME=\"$(CHEZ_LIBHOME)\" -L/usr/local/lib
+LFLAGS=-lossp-uuid -liconv
 
 all: run
 
 linux: CHEZ_ARCH=ta6le
+linux: CHEZ_HOME=/home/linuxbrew/.linuxbrew/Cellar/chezscheme/9.5.8a
+linux: LFLAGS= -lm -lcurses -lpthread -ldl -luuid
 linux: all
 
 run: run.c
-	$(CC) $(CFLAGS) -g -m64 -o $@ $< $(CHEZ_LIBHOME)/kernel.o -lm -lcurses -lpthread -ldl -luuid #-lossp-uuid -liconv
+	$(CC) $(CFLAGS) -g -m64 -o $@ $< $(CHEZ_LIBHOME)/kernel.o $(LFLAGS)
 
 .PHONY: clean
 clean:
