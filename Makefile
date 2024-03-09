@@ -1,10 +1,11 @@
+CHEZ_BIN:=chez-scheme
 CHEZ_ARCH:=ta6fb
-CHEZ_VER:=9.5.8
+CHEZ_VER:=9.6.4
 
 CHEZ_LIBHOME=${CHEZ_HOME}/lib/csv${CHEZ_VER}/${CHEZ_ARCH}
 CFLAGS=-Wall -I$(CHEZ_LIBHOME) -L$(CHEZ_LIBHOME) \
  -DCHEZ_LIBHOME=\"$(CHEZ_LIBHOME)\" -L/usr/local/lib
-LFLAGS=-lossp-uuid -liconv
+LFLAGS=-lossp-uuid -liconv -lm -lpthread -lcurses
 
 all: run
 
@@ -15,6 +16,9 @@ linux: all
 
 run: run.c
 	$(CC) $(CFLAGS) -g -m64 -o $@ $< $(CHEZ_LIBHOME)/kernel.o $(LFLAGS)
+
+test:
+	echo "(import (schasm))(test-schasm)(exit)" | $(CHEZ_BIN) -q schasm.ss
 
 .PHONY: clean
 clean:

@@ -54,8 +54,8 @@
 
    disasm
 
-   instr
-   asm-instr-syntax
+   ;; op-syntax
+   ;; asm-instr-syntax
 
    ;; testing
    test-schasm)
@@ -106,6 +106,18 @@
   (define %r13 (make-register 5 #t))
   (define %r14 (make-register 6 #t))
   (define %r15 (make-register 7 #t))
+
+  (define-record-type pointer
+    (nongenerative)
+    (fields address))
+  (define (ptr addr)
+    (make-pointer addr))
+
+  (define-record-type offset-register
+    (nongenerative)
+    (fields offset register))
+  (define (offset offset register)
+    (make-offset-register offset register))
 
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
@@ -190,6 +202,13 @@
            [l (imm32 (fxarithmetic-shift-right x 32))])
       (append m l)))
 
+  (define (registers-encode offset src dst)
+    (let ((xsrc (or src %rax))
+          (xdst (or dst %rax)))
+      (+ offset
+         (fxarithmetic-shift-left (register-opcode xsrc) 3)
+         (register-opcode xdst))))
+
   (define (imm64->reg asm register imm)
     (emit asm
           (rex-prefix 1 0 0 (rex-i-register? register))
@@ -200,16 +219,28 @@
     (emit asm
           (rex-prefix 1 (rex-i-register? src) 0 (rex-i-register? dst))
           #x89
-          (+ #xc0
-             (fxarithmetic-shift-left (register-opcode src) 3)
-             (register-opcode dst))))
+          (registers-encode #xc0 src dst)))
 
-  (define (mem->reg64 asm dst src)
+  (define (mem64->reg64 asm dst src)
     (emit asm
           (rex-prefix 1 0 0 (rex-i-register? dst))
           #x8b
-          (+ #xc0 (register-opcode dst))
-          (imm64 src)))
+          (registers-encode #x04 #f dst)
+          #x25
+          (imm32 (pointer-address src))))
+
+  (define (memreg64->reg64 asm dst src)
+    (emit asm
+          (rex-prefix 1 (rex-i-register? src) 0 (rex-i-register? dst))
+          #x8b
+          (registers-encode #x00 src dst)))
+
+  (define (offmemreg64->reg64 asm dst src offset)
+    (emit asm
+          (rex-prefix 1 (rex-i-register? src) 0 (rex-i-register? dst))
+          #x8b
+          (registers-encode #x80 src dst)
+          (imm32 offset)))
 
   (define (label asm name)
     (eq-hashtable-set! (asm-labels asm) 
@@ -223,12 +254,21 @@
   (define (ret asm)
     (emit asm #xc3))
 
+  ;; lookup: https://www.felixcloutier.com/x86/mov
   (define (mov asm dst src)
     (cond
      ((and (register? dst) (number? src))
       (imm64->reg asm dst src))
      ((and (register? dst) (register? src))
       (reg64->reg64 asm dst src))
+     ((and (register? dst) (pointer? src))
+      (cond
+       ((register? (pointer-address src))
+        (memreg64->reg64 asm dst (pointer-address src)))
+       (else
+        (mem64->reg64 asm dst src))))
+     ((and (register? dst) (offset-register? src))
+      (offmemreg64->reg64 asm dst (offset-register-register src) (offset-register-offset src)))
      (else
       (raise "unrecognized/unhandled operand[s]"))))
 
@@ -476,27 +516,31 @@
                 (newline)
                 (loop))))))))
 
-  (define-syntax op-mode
-    (syntax-rules (rel abs)
-      ((_ (rel i)) (cons 'rel i))
-      ((_ (abs i)) (cons 'abs i))
-      ((_ (mem i)) (cons 'mem i))
-      ((_ a) 'a)))
-  (define-syntax instr
-    (syntax-rules ()
-      ((_ op) (list 'op))
-      ((_ op a) (list 'op (op-mode a)))
-      ((_ op a b) (list 'op (op-mode a) (op-mode b)))))
+  ;; (define-syntax op-mode
+  ;;   (syntax-rules (rel abs mem)
+  ;;     ((_ (rel i off)) (list 'make-offset-register i off))
+  ;;     ((_ (mem i)) (list 'make-pointer i))
+  ;;     ((_ (abs i)) 'i)
+  ;;     ((_ a) 'a)))
+  ;; (define-syntax op-syntax
+  ;;   (syntax-rules ()
+  ;;     ((_ op) (list 'op))
+  ;;     ((_ op a) (list 'op (op-mode a)))
+  ;;     ((_ op a b) (list 'op (op-mode a) (op-mode b)))))
 
-  (define-syntax asm-instr-syntax
-    (syntax-rules ()
-      ((_ (x)) (instr x))
-      ((_ (x a)) (instr x a))
-      ((_ (x a b)) (instr x a b))
-      ((_ x xs ...)
-       (list
-        (asm-instr-syntax x)
-        (asm-instr-syntax xs ...)))))
+  ;; ;; WIP
+  ;; ;; alternative to asm-syntax which provides syntax
+  ;; ;; helpers for op-modes as defined from instr syntax.
+  ;; (define-syntax asm-instr-syntax
+  ;;   (syntax-rules ()
+  ;;     ((_ (x)) (op-syntax x))
+  ;;     ((_ (x a)) (op-syntax x a))
+  ;;     ((_ (x a b)) (op-syntax x a b))
+  ;;     ((_ (x a b c)) (op-syntax x a b c))
+  ;;     ((_ x xs ...)
+  ;;      (list
+  ;;       (asm-instr-syntax x)
+  ;;       (asm-instr-syntax xs ...)))))
 
   (define-syntax assert-equal
     (syntax-rules ()
@@ -514,12 +558,19 @@
          (display (format "~a~%" name))
 	 instrs ...))))
 
+  (define (display-hex-instr bin)
+    (let ((list (bytevector->u8-list bin))
+          (print-hex (lambda (byte) (display (format "0x~x," byte)))))
+      (for-each print-hex list)
+      (display "\n")))
+
   (define-syntax assert-instr
     (syntax-rules ()
       ((_ instr exp)
        (begin
 	 (let ((bin (with-asm instr)))
-	   (display bin)
+	   ;(display bin)
+           (display-hex-instr bin)
 	   (let-values ([(out out-string) (open-string-output-port)])
 	     (disasm bin out)
 	     (assert-equal (out-string) exp)))))))
@@ -533,14 +584,24 @@
     (deftest "imm64 byte-order"
       (assert-equal (imm64 1) '(1 0 0 0 0 0 0 0)))
 
-    (deftest "instr binary rel"
-      (assert-equal (instr mov (rel 10) (rel 20)) '(mov (rel . 10) (rel . 20))))
-    (deftest "instr binary abs"
-      (assert-equal (instr mov (abs 10) (rel 20)) '(mov (abs . 10) (rel . 20))))
-    (deftest "instr unary"
-      (assert-equal (instr mov 10) '(mov 10)))
-    (deftest "instr nullary"
-      (assert-equal (instr mov) '(mov)))
+    ;; (deftest "instr binary rel"
+    ;;   (assert-equal (op-syntax mov (rel 10) (rel 20)) '(mov (rel 10) (rel 20))))
+    ;; (deftest "instr binary abs"
+    ;;   (assert-equal (op-syntax mov (abs 10) (rel 20)) '(mov 10 (rel 20))))
+    ;; (deftest "instr pointer"
+    ;;   (assert-equal (op-syntax mov (mem 10) (rel 20)) '(mov (make-pointer 10) (rel 20))))
+    ;; (deftest "instr unary"
+    ;;   (assert-equal (op-syntax mov 10) '(mov 10)))
+    ;; (deftest "instr nullary"
+    ;;   (assert-equal (op-syntax mov) '(mov)))
 
+    (deftest "mov reg->reg"
+      (assert-instr (mov %rax %rbx) "movq %rbx, %rax"))
     (deftest "mov imm->reg"
-      (assert-instr (mov %rax 10) "movabsq $10, %rax"))))
+      (assert-instr (mov %rax 10) "movabsq $10, %rax"))
+    (deftest "mov mem->reg"
+      (assert-instr (mov %rax (ptr #x11223344)) "movq 31, %rax"))
+    (deftest "mov (reg)->reg"
+      (assert-instr (mov %rax (ptr %rbx)) "movq (%rbx), %rax"))
+    (deftest "mov offmem->reg"
+      (assert-instr (mov %rax (offset #x11223344 %rax)) "movq 31(%rax), %rax"))))
