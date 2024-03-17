@@ -516,32 +516,6 @@
                 (newline)
                 (loop))))))))
 
-  ;; (define-syntax op-mode
-  ;;   (syntax-rules (rel abs mem)
-  ;;     ((_ (rel i off)) (list 'make-offset-register i off))
-  ;;     ((_ (mem i)) (list 'make-pointer i))
-  ;;     ((_ (abs i)) 'i)
-  ;;     ((_ a) 'a)))
-  ;; (define-syntax op-syntax
-  ;;   (syntax-rules ()
-  ;;     ((_ op) (list 'op))
-  ;;     ((_ op a) (list 'op (op-mode a)))
-  ;;     ((_ op a b) (list 'op (op-mode a) (op-mode b)))))
-
-  ;; ;; WIP
-  ;; ;; alternative to asm-syntax which provides syntax
-  ;; ;; helpers for op-modes as defined from instr syntax.
-  ;; (define-syntax asm-instr-syntax
-  ;;   (syntax-rules ()
-  ;;     ((_ (x)) (op-syntax x))
-  ;;     ((_ (x a)) (op-syntax x a))
-  ;;     ((_ (x a b)) (op-syntax x a b))
-  ;;     ((_ (x a b c)) (op-syntax x a b c))
-  ;;     ((_ x xs ...)
-  ;;      (list
-  ;;       (asm-instr-syntax x)
-  ;;       (asm-instr-syntax xs ...)))))
-
   (define-syntax assert-equal
     (syntax-rules ()
       ((_ x y)
@@ -569,7 +543,6 @@
       ((_ instr exp)
        (begin
 	 (let ((bin (with-asm instr)))
-	   ;(display bin)
            (display-hex-instr bin)
 	   (let-values ([(out out-string) (open-string-output-port)])
 	     (disasm bin out)
