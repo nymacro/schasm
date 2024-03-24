@@ -21,6 +21,9 @@
 (define write-syscall (cond
 		       ((equal? (machine-type) 'ta6le) 1)
 		       ((equal? (machine-type) 'ta6fb) 4)))
+(define stdout 1)
+(define stderr 2)
+(define stdin 3)
 
 (define random-string (foreign-alloc 10))
 
@@ -82,7 +85,7 @@
      (subr 'print
            (mov %rsi %rax)
            (mov %rax write-syscall) ; write
-           (mov %rdi 1) ; fd
+           (mov %rdi stdout) ; fd
            (syscall)
            (ret))
 

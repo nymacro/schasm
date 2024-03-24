@@ -54,9 +54,6 @@
 
    disasm
 
-   ;; op-syntax
-   ;; asm-instr-syntax
-
    ;; testing
    test-schasm)
   (import (chezscheme))
@@ -119,6 +116,7 @@
   (define (offset offset register)
     (make-offset-register offset register))
 
+  ;; (<labels-hashtable> <asm-output-port> <deferred-instr-list>)
   (define (make-asm)
     (let ([port (let-values ([(op g) (open-bytevector-output-port)])
 		  (cons op g))])
@@ -556,18 +554,6 @@
       (assert-equal (imm32 1) '(1 0 0 0)))
     (deftest "imm64 byte-order"
       (assert-equal (imm64 1) '(1 0 0 0 0 0 0 0)))
-
-    ;; (deftest "instr binary rel"
-    ;;   (assert-equal (op-syntax mov (rel 10) (rel 20)) '(mov (rel 10) (rel 20))))
-    ;; (deftest "instr binary abs"
-    ;;   (assert-equal (op-syntax mov (abs 10) (rel 20)) '(mov 10 (rel 20))))
-    ;; (deftest "instr pointer"
-    ;;   (assert-equal (op-syntax mov (mem 10) (rel 20)) '(mov (make-pointer 10) (rel 20))))
-    ;; (deftest "instr unary"
-    ;;   (assert-equal (op-syntax mov 10) '(mov 10)))
-    ;; (deftest "instr nullary"
-    ;;   (assert-equal (op-syntax mov) '(mov)))
-
     (deftest "mov reg->reg"
       (assert-instr (mov %rax %rbx) "movq %rbx, %rax"))
     (deftest "mov imm->reg"
