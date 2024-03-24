@@ -18,7 +18,8 @@ run: run.c
 	$(CC) $(CFLAGS) -g -m64 -o $@ $< $(CHEZ_LIBHOME)/kernel.o $(LFLAGS)
 
 test:
-	echo "(import (schasm))(test-schasm)(exit)" | $(CHEZ_BIN) -q schasm.ss
+	#echo "(import (schasm))(test-schasm)(exit)" | $(CHEZ_BIN) -q schasm.ss
+	echo "(import (elf))(test-elf)(exit)" | $(CHEZ_BIN) -q schasm.ss
 
 .PHONY: clean
 clean:
