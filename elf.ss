@@ -3,25 +3,7 @@
   (export
    object)
 
-  (define (make-elf)
-    (let ([port (let-values ([(op g) (open-bytevector-output-port)])
-		  (cons op g))])
-      (list port)))
-
-  (define (elf-port elf)
-    (car elf))
-  
-  (define-syntax emit
-    (syntax-rules ()
-      ((emit asm instr)
-       (if (list? instr)
-           (for-each (lambda (x) (put-u8 (elf-port asm) x))
-                     instr)
-           (put-u8 (elf-port asm) instr)))
-      ((emit asm instr xinstr ...)
-       (begin
-	 (emit asm instr)
-	 (emit asm xinstr ...)))))
+  (define make-elf make-patch-stream)
 
   (define (magic out)
     (emit out #x7f #cE #cL #cF))
@@ -114,4 +96,10 @@
   (define (seciton-header-size out)
     (emit out (int64 0)))
 
+  (define-syntax with-elf
+    (syntax-rules ()
+      ((_ xs ...)
+       (let ((out (make-elf)))
+         (emit out xs ...)
+         (patch-stream-value out)))))
   )

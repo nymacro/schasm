@@ -56,19 +56,8 @@
 
    ;; testing
    test-schasm)
-  (import (chezscheme))
-
-  (define-syntax emit
-    (syntax-rules ()
-      ((emit asm instr)
-       (if (list? instr)
-           (for-each (lambda (x) (put-u8 (asm-port asm) x))
-                     instr)
-           (put-u8 (asm-port asm) instr)))
-      ((emit asm instr xinstr ...)
-       (begin
-	 (emit asm instr)
-	 (emit asm xinstr ...)))))
+  (import (chezscheme)
+          (stream))
 
   (define-record-type register
     (nongenerative)
@@ -116,47 +105,25 @@
   (define (offset offset register)
     (make-offset-register offset register))
 
-  ;; (<labels-hashtable> <asm-output-port> <deferred-instr-list>)
-  (define (make-asm)
-    (let ([port (let-values ([(op g) (open-bytevector-output-port)])
-		  (cons op g))])
-      (list (make-eq-hashtable)
-            port
-            (box (list)))))
+  (define make-asm make-patch-stream)
 
-  (define (asm-labels asm)
-    (car asm))
+  (define asm-labels patch-stream-labels)
 
-  (define (asm-port asm)
-    (caadr asm))
+  (define asm-port patch-stream-port)
 
-  (define (asm-read-value! asm)
-    ((cdr (cadr asm))))
-  (define (asm-value asm)
-    ;; TODO is there a better way to do this with a bytevector port??
-    (let ([v (asm-read-value! asm)])
-      (put-bytevector (asm-port asm) v)
-      v))
-  (define (asm-value! asm value)
-    (asm-read-value! asm)
-    (put-bytevector (asm-port asm) value)
-    value)
+  (define asm-read-value! patch-stream-read-value!)
 
-  (define asm-offset$
-    (make-parameter
-     (lambda (asm) (bytevector-length (asm-value asm)))))
+  (define asm-value patch-stream-value)
 
-  (define (asm-offset asm)
-    ((asm-offset$) asm))
+  (define asm-value! patch-stream-value!)
 
-  (define (asm-deferred-instr asm)
-    (caddr asm))
+  (define asm-offset$ patch-stream-offset$)
 
-  (define (defer-instr asm whence defer-fn)
-    (let* ((l (asm-deferred-instr asm))
-           (v (unbox l)))
-      ;; forgive me father, for I have sinned
-      (set-box! l (cons (cons defer-fn whence) v))))
+  (define asm-offset patch-stream-offset)
+
+  (define asm-deferred-instr patch-stream-deferred)
+
+  (define defer-instr patch-defer)
 
   (define (pp s)
     (cond
@@ -436,30 +403,6 @@
           (let ((label-offset (asm-label-offset asm label))
                 (offset (asm-offset asm)))
             (fn asm dst (- label-offset offset)))))))
-
-  ;; helper function to patch/overwrite a section of bytevector
-  (define (patch-asm-stream asm patch offset)
-    (let ((mc (asm-read-value! asm)))
-      (bytevector-copy! patch 0
-                        mc offset
-                        (bytevector-length patch))
-      (asm-value! asm mc)))
-
-  ;; Replaces placeholder instructions which were unable to be correctly
-  ;; encoded at read time. This happens mostly for jump instructions
-  ;; which target labels which are not yet defined.
-  (define (resolve-deferred-instr asm)
-    (let loop ((deferred (unbox (asm-deferred-instr asm))))
-      (unless (null? deferred)
-        (let* ((pair (car deferred))
-               (fn (car pair))
-               (off (cdr pair))
-               (patch (with-asm-labels-offset asm off (lambda (asm) (fn asm)))))
-          (patch-asm-stream asm patch off))
-        (loop (cdr deferred)))))
-
-  (define (resolve-all asm)
-    (resolve-deferred-instr asm))
 
   (define-syntax asm
     (syntax-rules ()
