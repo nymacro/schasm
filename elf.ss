@@ -26,17 +26,17 @@
   (define (os-abi out)
     (emit out #x09))
   (define (abi-version out)
-    (emit out #x01))
+    (emit out #x00))
   (define (pad out)
     (emit out #x00 #x00 #x00 #x00 #x00 #x00 #x00))
 
   ;; relocatable
   (define (type out)
-    (emit out #x00 #x00))
+    (emit out (imm16 #x01)))
   (define (machine out)
-    (emit out #x00 #x3e))
+    (emit out (imm16 #x3e)))
   (define (version out)
-    (emit out #x00 #x00 #x00 #x00))
+    (emit out (imm32 #x00)))
   ;; entry point
   (define (entry out)
     (emit out (imm64 0)))
@@ -47,7 +47,7 @@
   ;; (define (section-header-offset out)
   ;;   (emit out (imm64 0)))
   (define (flags out)
-    (emit out (imm16 0)))
+    (emit out (imm32 0)))
   (define (header-size out)
     (emit out (imm16 0)))
   (define (program-header-size out)
@@ -78,6 +78,13 @@
     (emit out (imm64 0)))
   (define (program-header-alignment out)
     (emit out (imm64 0)))
+
+  ;; simple function to do print debugging of position
+  (define (debug-position out where)
+    (let ((offset (patch-stream-offset out)))
+      (display (string-append where ": "))
+      (display offset)
+      (newline)))
 
   (define (make-elf-header out)
     (elf-syntax out
@@ -149,7 +156,33 @@
          (display (format "~a~%" name))
 	 instrs ...))))
 
+  (define (dump-to-tmp out)
+    (let* ((filename "/tmp/elf.tmp")
+           (port (open-file-output-port filename (file-options no-fail))))
+      (put-bytevector port out)
+      (close-output-port port)
+      filename))
+
+  (define (dump-elf out)
+    (let* ([filename (dump-to-tmp out)]
+           [transcoder (make-transcoder (utf-8-codec) (eol-style lf)
+                                        (error-handling-mode replace))])
+      (let-values ([(stdin stdout stderr pid) (open-process-ports (string-append "readelf -a " filename) 'block transcoder)])
+        (close-output-port stdin)
+
+        (let loop ()
+          (let ((d (get-line stdout)))
+            (unless (eof-object? d)
+              (display d)
+              (newline)
+              (loop)))))))
+
+  (define-syntax with-elf-test
+    (syntax-rules ()
+      ((with-elf-test xs ...)
+       (dump-elf (with-elf xs ...)))))
+
   ;; TODO readelf output
   (define (test-elf)
-    (deftest "empty elf" (with-elf (make-elf-header))))
+    (deftest "empty elf" (with-elf-test (make-elf-header))))
   )
