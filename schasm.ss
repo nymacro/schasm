@@ -58,7 +58,7 @@
    test-schasm)
   (import (chezscheme)
           (types)
-          (stream))
+          (rename (stream) (label patch-label)))
 
   (define-record-type register
     (nongenerative)
@@ -93,6 +93,8 @@
   (define %r13 (make-register 5 #t))
   (define %r14 (make-register 6 #t))
   (define %r15 (make-register 7 #t))
+
+  (define %rip #x05)
 
   (define-record-type pointer
     (nongenerative)
@@ -135,11 +137,25 @@
       (display s)))
     (newline))
 
-  (define (asm-label-offset asm label)
-    (let ([label (eq-hashtable-ref (asm-labels asm) label #f)])
-      (unless label
-	(raise "unknown label"))
-      label))
+  ;; simple function to do print debugging of position
+  (define (debug-position out where)
+    (let ((offset (patch-stream-offset out)))
+      (display (string-append where ": "))
+      (display offset)
+      (newline)))
+
+  ;; label, but padding to 8 bytes
+  (define (label asm label)
+    ;; (pad-to asm 8 (lambda () (nop asm)))
+
+    (patch-label asm label)
+    (debug-position asm (symbol->string label))
+
+    ;; this shouldn't be needed
+    ;; (nop asm)
+    )
+
+  (define asm-label-offset patch-stream-label-offset)
 
   (define (registers-encode offset src dst)
     (let ((xsrc (or src %rax))
@@ -180,12 +196,6 @@
           #x8b
           (registers-encode #x80 src dst)
           (imm32 offset)))
-
-  (define (label asm name)
-    (eq-hashtable-set! (asm-labels asm) 
-		       name
-		       (asm-offset asm))
-    (nop asm))
 
   (define (nop asm)
     (emit asm #x90))
@@ -245,12 +255,13 @@
     (let* ((offset (asm-offset asm)))
       (fn asm 0)
       (defer-instr asm offset
-        (lambda (asm)
+        (lambda (asm extra-data)
           (let ((label-offset (asm-label-offset asm label))
                 (offset (asm-offset asm)))
             (fn asm (- label-offset offset)))))))
 
   (define (je-relative asm offset)
+    ;; 6-byte instr
     (emit asm
           #x0f
           #x84
@@ -260,6 +271,7 @@
     (jmp-helper asm label je-relative))
 
   (define (jne-relative asm offset)
+    ;; 6-byte instr
     (emit asm
           #x0f
           #x85
@@ -326,7 +338,7 @@
     (let ((offset (asm-offset asm)))
       (call-helper asm 0)
       (defer-instr asm offset
-        (lambda (asm)
+        (lambda (asm extra-data)
           (let ((label-offset (asm-label-offset asm label))
                 (offset (asm-offset asm)))
             (call-helper asm (- label-offset offset)))))))
@@ -340,19 +352,26 @@
   (define-syntax subr
     (syntax-rules ()
       ((_ asm name instrs ...)
-       (asm-syntax asm (label name)
+       (asm-syntax asm
+                   (label name)
                    instrs ...))))
 
   ;; define simple data octets
+  ;; (define (data asm name . d)
+  ;;   (let ((end-label-name (gensym)))
+  ;;     (jmp asm end-label-name)
+  ;;     (label asm name)
+  ;;     (let loop ((c d))
+  ;;       (unless (null? c)
+  ;;         (emit asm (car c))
+  ;;         (loop (cdr c))))
+  ;;     (label asm end-label-name)))
   (define (data asm name . d)
-    (let ((end-label-name (gensym)))
-      (jmp asm end-label-name)
-      (label asm name)
-      (let loop ((c d))
-        (unless (null? c)
-          (emit asm (car c))
-          (loop (cdr c))))
-      (label asm end-label-name)))
+    (label asm name)
+    (let loop ((c d))
+      (unless (null? c)
+        (emit asm (car c))
+        (loop (cdr c)))))
 
   ;; define string data
   (define (data-string asm name string)
@@ -364,8 +383,7 @@
     (emit asm
           (rex-prefix 1 0 0 (rex-i-register? register))
           #x8d
-          (+ #x05
-             (fxarithmetic-shift-left (register-opcode register) 3))
+          (registers-encode #b00000000 register %rbp)
           (imm32 (- offset 6))))
 
   (define (lea asm dst label)
@@ -373,7 +391,7 @@
           (offset (asm-offset asm)))
       (fn asm dst 0)
       (defer-instr asm offset
-        (lambda (asm)
+        (lambda (asm extra-data)
           (let ((label-offset (asm-label-offset asm label))
                 (offset (asm-offset asm)))
             (fn asm dst (- label-offset offset)))))))
@@ -383,7 +401,7 @@
       ((_ out xs ...)
        (begin
          (asm-syntax out xs ...)
-         (resolve-all out)))))
+         (resolve-all out #f)))))
 
   (define-syntax with-asm
     (syntax-rules ()
@@ -453,15 +471,20 @@
       (for-each print-hex list)
       (display "\n")))
 
-  (define-syntax assert-instr
+  (define-syntax assert-instrs
     (syntax-rules ()
-      ((_ instr exp)
+      ((_ (instrs ...) exp)
        (begin
-	 (let ((bin (with-asm instr)))
+	 (let ((bin (with-asm instrs ...)))
            (display-hex-instr bin)
 	   (let-values ([(out out-string) (open-string-output-port)])
 	     (disasm bin out)
 	     (assert-equal (out-string) exp)))))))
+
+  (define-syntax assert-instr
+    (syntax-rules ()
+      ((_ instr exp)
+       (assert-instrs (instr) exp))))
 
   (define (test-schasm)
     (deftest "imm16" (assert-equal (imm16 20) '(20 0)))
@@ -480,4 +503,18 @@
     (deftest "mov (reg)->reg"
       (assert-instr (mov %rax (ptr %rbx)) "movq (%rbx), %rax"))
     (deftest "mov offmem->reg"
-      (assert-instr (mov %rax (offset #x11223344 %rax)) "movq 31(%rax), %rax"))))
+      (assert-instr (mov %rax (offset #x11223344 %rax)) "movq 31(%rax), %rax"))
+    (deftest "label offset"
+      (let ((fake-assert (lambda (out a b) (assert-equal a b))))
+        (with-asm
+         (label 'start)
+         (nop)
+         (label 'first)
+         (nop)
+         (nop)
+         (label 'second)
+         (fake-assert (asm-label-offset 'start) 0)
+         (fake-assert (asm-label-offset 'first) 1)
+         (fake-assert (asm-label-offset 'second) 3))))
+    )
+  )

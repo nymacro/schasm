@@ -86,6 +86,22 @@
       (display offset)
       (newline)))
 
+  (define (d-label label)
+    (lambda (out _)
+      ;; (guard (ex
+      ;;         (#t 0))
+      (patch-stream-label-offset out label)))
+
+  (define-syntax defer
+    (syntax-rules ()
+      ((defer-out out fn (args ...) defer-fn)
+       ((lambda (out)
+          (patch-defer out (patch-stream-offset out)
+                       (lambda (out extra-data)
+                         ;; (display (format "Running deferred ~a\n" fn))
+                         (fn out (defer-fn out extra-data))))
+          (fn out args ...)) out))))
+
   (define (make-elf-header out)
     (elf-syntax out
                 (magic)
@@ -99,8 +115,15 @@
                 (machine)
                 (version)
                 (entry)
-                (program-header-offset 0)
-                (section-header-offset 0)
+
+                (defer program-header-offset
+                  (0)
+                  (d-label 'first-program-header))
+
+                (defer section-header-offset
+                  (0)
+                  (d-label 'first-section-header))
+
                 (flags)
                 (header-size)
                 (program-header-size)
@@ -108,6 +131,18 @@
                 (section-header-size)
                 (section-header-count)
                 (section-header-name-index)))
+
+  (define (make-program-header out size)
+    (elf-syntax out
+                (label 'first-program-header)
+                (program-header-type 0)
+                (program-header-flags 1 0 1)
+                (program-header-offset 0)
+                (program-header-virtual-address #x00)
+                (program-header-physical-address #x00)
+                (program-header-file-size)
+                (program-header-mem-size)
+                (program-header-alignment)))
 
   ;; SECTION HEADER
   (define (section-header-name out offset)
@@ -131,6 +166,20 @@
   (define (seciton-header-size out)
     (emit out (imm64 0)))
 
+  (define (make-section-header out size)
+    (elf-syntax out
+                (label 'first-section-header)
+                (section-header-name 0)
+                (section-header-type 0)
+                (section-header-flags 0)
+                (section-header-virtual-address #x00)
+                (section-header-offset #x00)
+                (section-header-file-size)
+                (section-header-link)
+                (section-header-info)
+                (section-header-address-alignment)
+                (section-header-size)))
+
   ;; syntax sugar to allow writing:
   ;; > (asm out (instr) (instr))
   ;; instead of:
@@ -146,7 +195,7 @@
       ((_ xs ...)
        (let ((out (make-elf)))
          (elf-syntax out xs ...)
-         (resolve-all out)
+         (resolve-all out #f)
          (patch-stream-value out)))))
 
   (define-syntax deftest
@@ -182,7 +231,19 @@
       ((with-elf-test xs ...)
        (dump-elf (with-elf xs ...)))))
 
+  ;; (define-syntax with-program-header
+  ;;   (syntax-rules ()
+  ;;     ((program-header-section name xs ...)
+  ;;      (begin
+  ;;        (label name)
+
   ;; TODO readelf output
   (define (test-elf)
-    (deftest "empty elf" (with-elf-test (make-elf-header))))
+    (deftest "empty elf" (with-elf-test (make-elf-header)))
+    (deftest "section elf"
+      (with-elf-test
+       (make-elf-header)
+       (make-program-header 0)
+       (make-section-header 0)
+       )))
   )

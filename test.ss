@@ -34,31 +34,10 @@
      (push %rsi)
      (push %rsp)
 
-     ;; register tests
-     ;; (mov %rax %rax)
-     ;; (mov %rcx %rax)
-     ;; (mov %rdx %rax)
-     ;; (mov %rbx %rax)
-     ;; (mov %rbp %rax)
-     ;; (mov %rsi %rax)
-     ;; (mov %rdi %rax)
-
-     ;; (test %rax 0)
-     ;; (test %rcx 0)
-     ;; (test %rdx 0)
-     ;; (test %r8 0)
-
      ;; loop some times
-     (mov %r8 10)
-     (mov %r9 0)
-     (label 'loop)
-
-     ;; syscall to write
-     ;; (mov %rax 4) ; write
-     ;; (mov %rdi 1) ; fd
-     ;; (lea %rsi 'my-data) ; ptr
-     ;; (mov %rdx 6) ; len
-     ;; (int #x80)
+     ;; (mov %r8 10)
+     ;; (mov %r9 0)
+     ;; (label 'loop)
 
      (lea %rax 'my-data)
      (mov %rdx 6)
@@ -66,9 +45,9 @@
 
      (add %r9 %rax)
 
-     (sub %r8 1)
-     (cmp %r8 0)
-     (jne 'loop)
+     ;; (sub %r8 1)
+     ;; (cmp %r8 0)
+     ;; (jne 'loop)
 
      (mov %rax %r9)
 
@@ -90,8 +69,16 @@
            (ret))
 
      (data-string 'my-data "hello\n")
-     (data-string 'other-data "subr\n")
-     (nop))
+     (data-string 'my-data "hello\n")
+     )
+
+;; (asm out
+;;      ;; (lea %rax 'test)
+;;      ;; (lea %rbx 'test)
+;;      ;; (mov %rax 0)
+;;      (jmp 'test)
+;;      (ret)
+;;      (data-string 'test "hello\n"))
 
 (define (run)
   (let ([bin (asm-value out)])

@@ -11,6 +11,10 @@
    patch-stream-offset
    patch-stream-deferred
    patch-defer
+   patch-defer-label
+   patch-stream-label-offset
+   label
+   pad-to
    emit
    resolve-all)
   (import (chezscheme))
@@ -25,6 +29,28 @@
 
   (define (patch-stream-labels stream)
     (car stream))
+
+  (define (pad-to asm pad-amount fn)
+    (let* ((current-offset (patch-stream-offset asm))
+           (pad-count (- pad-amount (modulo current-offset pad-amount)))
+           (do-pad (lambda (count)
+                     (let loop ((n count))
+                       (when (> n 0)
+                         (fn)
+                         (loop (- n 1)))))))
+      (display (format "offset: ~a; padding ~a; (new offset ~a)\n" current-offset pad-count (+ current-offset pad-count)))
+      (do-pad pad-count)))
+
+  (define (label asm name)
+    (eq-hashtable-set! (patch-stream-labels asm)
+		       name
+		       (patch-stream-offset asm)))
+
+  (define (patch-stream-label-offset asm label)
+    (let ([found (eq-hashtable-ref (patch-stream-labels asm) label #f)])
+      (unless found
+	(raise (format "unknown label ~a" label)))
+      found))
 
   (define (patch-stream-port stream)
     (caadr stream))
@@ -57,6 +83,21 @@
       ;; forgive me father, for I have sinned
       (set-box! l (cons (cons defer-fn whence) v))))
 
+  (define (find-pair list symbol)
+    (cond
+     ((equal? list '()) #f)
+     ((equal? (caar list) symbol) (car list))
+     (else
+      (find-pair (cdr list) symbol))))
+
+  (define (patch-defer-label stream label value)
+    (let* ((l (patch-stream-deferred stream))
+           (v (unbox l))
+           (pair (find-pair label value)))
+      (if pair
+          (set-box! pair (cons label value))
+          (set-box! l (cons (cons label value) v)))))
+
   ;; helper function to patch/overwrite a section of bytevector
   (define (patch-stream stream patch offset)
     (let ((mc (patch-stream-read-value! stream)))
@@ -68,13 +109,13 @@
   ;; Replaces placeholder instructions which were unable to be correctly
   ;; encoded at read time. This happens mostly for jump instructions
   ;; which target labels which are not yet defined.
-  (define (resolve-deferred asm)
+  (define (resolve-deferred asm extra-data)
     (let loop ((deferred (unbox (patch-stream-deferred asm))))
       (unless (null? deferred)
         (let* ((pair (car deferred))
                (fn (car pair))
                (off (cdr pair))
-               (patch (with-patch-stream-labels-offset asm off (lambda (asm) (fn asm)))))
+               (patch (with-patch-stream-labels-offset asm off (lambda (asm) (fn asm extra-data)))))
           (patch-stream asm patch off))
         (loop (cdr deferred)))))
 
@@ -90,8 +131,8 @@
     (parameterize ((patch-stream-offset$ (lambda (stream) offset)))
       (with-patch-stream-labels stream fn)))
 
-  (define (resolve-all asm)
-    (resolve-deferred asm))
+  (define (resolve-all asm extra-data)
+    (resolve-deferred asm extra-data))
 
   (define-syntax emit
     (syntax-rules ()

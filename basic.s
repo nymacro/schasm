@@ -2,7 +2,12 @@
         .globl tst_sym
         .align 4
 
+	jmp 0
+
         pushq %rbp
+
+        mov 0(%rip), %rax
+        leaq 4(%rbx), %rax
 
 	movq 0x11223344(%rax), %rax
 	movq (%rax), %rbx
